@@ -1,0 +1,33 @@
+# Node / build
+node_modules/
+dist/
+out/
+release/
+*.log
+
+# Electron / Forge artifacts
+*.dmg
+*.exe
+*.AppImage
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+.env.*
+*.key
+
+# Local cache/index (rebuildable)
+index.sqlite
+index.sqlite-journal
+.cache/
+tmp/
+
+# Your content vault (recommended to keep OUT of git)
+vault/

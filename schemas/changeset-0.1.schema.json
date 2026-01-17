@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-seed.local/schemas/changeset-0.1.schema.json",
+  "title": "World-Seed ChangeSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "createdAt",
+    "provider",
+    "input",
+    "summary",
+    "changes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "name",
+        "model"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "online",
+            "local"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "e.g., openai, gemini, lmstudio"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "thinking": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Optional thinking level/budget if supported"
+        },
+        "metadata": {
+          "type": "object"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noteIds"
+      ],
+      "properties": {
+        "noteIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "instruction": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "description": "e.g., world-economy, politics, law-system"
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adds",
+        "edits",
+        "links",
+        "merges",
+        "conflicts"
+      ],
+      "properties": {
+        "adds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Add"
+          }
+        },
+        "edits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Edit"
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Link"
+          }
+        },
+        "merges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Merge"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Conflict"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "noteIds"
+      ],
+      "properties": {
+        "noteIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "excerpts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Add": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "content",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "note",
+            "structure",
+            "concept"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "pathHint": {
+          "type": "string",
+          "description": "Suggested vault path, e.g., structures/economy.md"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "Edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetId",
+        "targetKind",
+        "patchFormat",
+        "patch",
+        "rationale",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "targetId": {
+          "type": "string"
+        },
+        "targetKind": {
+          "type": "string",
+          "enum": [
+            "structure",
+            "concept",
+            "note"
+          ]
+        },
+        "patchFormat": {
+          "type": "string",
+          "enum": [
+            "unified",
+            "json-patch",
+            "replace-section"
+          ]
+        },
+        "patch": {
+          "type": [
+            "string",
+            "array",
+            "object"
+          ],
+          "description": "Patch payload, format depends on patchFormat"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "Link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "targetId",
+        "relation",
+        "confidence",
+        "evidence"
+      ],
+      "properties": {
+        "sourceId": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string",
+          "enum": [
+            "supports",
+            "contradicts",
+            "derives",
+            "part_of",
+            "similar_to",
+            "causes",
+            "regulated_by",
+            "defines"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      }
+    },
+    "Merge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mergeId",
+        "strategy",
+        "fromIds",
+        "into",
+        "rationale",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "mergeId": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "create-new",
+            "merge-into-existing"
+          ]
+        },
+        "fromIds": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string"
+          }
+        },
+        "into": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "structure",
+                "concept"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          }
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "Conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conflictId",
+        "type",
+        "items",
+        "explanation",
+        "resolutionOptions",
+        "evidence",
+        "confidence"
+      ],
+      "properties": {
+        "conflictId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "contradiction",
+            "duplication",
+            "ambiguity"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "refType",
+              "refId"
+            ],
+            "properties": {
+              "refType": {
+                "type": "string",
+                "enum": [
+                  "note",
+                  "concept",
+                  "structure"
+                ]
+              },
+              "refId": {
+                "type": "string"
+              },
+              "excerpt": {
+                "type": "string"
+              },
+              "claim": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "resolutionOptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "optionId",
+              "title"
+            ],
+            "properties": {
+              "optionId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "proposal": {
+                "type": "string"
+              },
+              "pros": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "0.1",
+  "id": "cs_b7eb23d1e999",
+  "createdAt": "2026-01-17T15:07:30Z",
+  "provider": {
+    "mode": "local",
+    "name": "lmstudio",
+    "model": "qwen2.5-coder",
+    "baseUrl": "http://localhost:1234/v1",
+    "thinking": "low"
+  },
+  "input": {
+    "noteIds": [
+      "n_001",
+      "n_002",
+      "n_003"
+    ],
+    "instruction": "Integrate these notes into economy/politics structures; propose links and detect conflicts.",
+    "scope": "world-core"
+  },
+  "summary": "Proposed initial structure docs for Politics & Economy, linked monetary system to governance, and flagged a contradiction around 'moneyless communism' vs 'currency-based purchases'.",
+  "changes": {
+    "adds": [
+      {
+        "id": "s_politics",
+        "kind": "structure",
+        "title": "Political System",
+        "content": "## Overview\n- The world is described as 'communist' in note n_001.\n- Governance: central planning committee.\n\n## Open Questions\n- How is scarcity handled?\n",
+        "pathHint": "structures/politics.md",
+        "evidence": {
+          "noteIds": [
+            "n_001"
+          ],
+          "excerpts": [
+            "\"This world is communist...\""
+          ]
+        },
+        "confidence": 0.78
+      },
+      {
+        "id": "s_economy",
+        "kind": "structure",
+        "title": "Economic System",
+        "content": "## Currency\n- Note n_002 suggests a currency with special properties (transfer limits, decay).\n\n## Markets\n- Purchases exist for luxury items.\n",
+        "pathHint": "structures/economy.md",
+        "evidence": {
+          "noteIds": [
+            "n_002"
+          ],
+          "excerpts": [
+            "\"There is a currency... you need to purchase\""
+          ]
+        },
+        "confidence": 0.81
+      }
+    ],
+    "edits": [],
+    "links": [
+      {
+        "sourceId": "s_economy",
+        "targetId": "s_politics",
+        "relation": "contradicts",
+        "note": "Currency-based purchases may contradict a strict moneyless communist model; needs reconciliation.",
+        "confidence": 0.73,
+        "evidence": {
+          "noteIds": [
+            "n_001",
+            "n_002"
+          ],
+          "excerpts": [
+            "communist",
+            "currency purchases"
+          ]
+        }
+      }
+    ],
+    "merges": [],
+    "conflicts": [
+      {
+        "conflictId": "c_communism_money",
+        "type": "contradiction",
+        "items": [
+          {
+            "refType": "note",
+            "refId": "n_001",
+            "excerpt": "This world is communist...",
+            "claim": "Moneyless / communist system"
+          },
+          {
+            "refType": "note",
+            "refId": "n_002",
+            "excerpt": "There is a currency... need to purchase",
+            "claim": "Currency + purchases exist"
+          }
+        ],
+        "explanation": "Two notes imply incompatible economic mechanisms unless the 'currency' is reinterpreted (e.g., token for rationing) or communism is partial/ideological only.",
+        "resolutionOptions": [
+          {
+            "optionId": "opt_reinterpret",
+            "title": "Reinterpret 'currency' as ration tokens",
+            "proposal": "Keep communist framing; redefine currency as non-tradeable allocation tokens tied to production quotas.",
+            "pros": [
+              "Keeps both ideas",
+              "Adds interesting mechanics"
+            ],
+            "cons": [
+              "Requires rules to prevent black markets"
+            ]
+          },
+          {
+            "optionId": "opt_partial",
+            "title": "Make communism ideological, not literal moneyless",
+            "proposal": "State ideology is communist, but a controlled currency exists for certain sectors.",
+            "pros": [
+              "Flexible worldbuilding",
+              "Explains 'purchases' naturally"
+            ],
+            "cons": [
+              "Needs political justification and enforcement mechanisms"
+            ]
+          }
+        ],
+        "evidence": {
+          "noteIds": [
+            "n_001",
+            "n_002"
+          ]
+        },
+        "confidence": 0.76
+      }
+    ]
+  }
+}

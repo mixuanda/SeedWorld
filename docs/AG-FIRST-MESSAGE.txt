@@ -1,0 +1,8 @@
+We are building "World-Seed": an Electron desktop app for ultra-fast atomic idea capture + AI-assisted classification/linking/conflict detection.
+
+Follow workspace rules under .agent/rules strictly:
+- AI must output ChangeSet JSON only; never write directly.
+- Provide a git-like review/apply UI with traceability to original notes.
+- Vault is file-based and OneDrive-friendly.
+
+Start with /bootstrap workflow. After it passes, propose the next smallest slice and run /vault. Keep commits small and runnable at every step.
