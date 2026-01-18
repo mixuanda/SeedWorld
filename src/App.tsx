@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Note, NoteInput } from './global';
+import type { Note, NoteInput, VoiceNote } from './global';
 import { VaultSetup } from './components/VaultSetup';
 import { NotesList } from './components/NotesList';
 import { NoteViewer } from './components/NoteViewer';
 import { Settings } from './components/Settings';
+import { VoiceRecorder } from './components/VoiceRecorder';
 
 type AppState = 'loading' | 'setup' | 'ready';
 
@@ -124,6 +125,13 @@ export function App(): React.ReactElement {
         }
     }, [selectedNote]);
 
+    const handleVoiceRecordingComplete = useCallback((voiceNote: VoiceNote) => {
+        // Add voice note to list (at the beginning)
+        setNotes(prev => [voiceNote, ...prev.filter(n => n.id !== voiceNote.id)]);
+        setSelectedNote(voiceNote);
+        console.log(`[App] Voice note created: ${voiceNote.id}`);
+    }, []);
+
     // ============================================================================
     // Render
     // ============================================================================
@@ -185,13 +193,19 @@ export function App(): React.ReactElement {
                     onKeyDown={handleKeyDown}
                     disabled={isSaving}
                 />
-                <button
-                    className="save-button"
-                    onClick={handleSave}
-                    disabled={!noteText.trim() || isSaving}
-                >
-                    {isSaving ? 'Saving...' : 'Save'}
-                </button>
+                <div className="capture-actions">
+                    <VoiceRecorder
+                        onRecordingComplete={handleVoiceRecordingComplete}
+                        disabled={isSaving}
+                    />
+                    <button
+                        className="save-button"
+                        onClick={handleSave}
+                        disabled={!noteText.trim() || isSaving}
+                    >
+                        {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
             </section>
 
             {/* Main Content - Split Layout */}

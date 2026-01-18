@@ -1,5 +1,6 @@
 import React from 'react';
-import type { Note } from '../global';
+import type { Note, VoiceNote } from '../global';
+import { AudioPlayer } from './AudioPlayer';
 
 interface NoteViewerProps {
     note: Note | null;
@@ -7,7 +8,15 @@ interface NoteViewerProps {
 }
 
 /**
+ * Type guard to check if a note is a voice note
+ */
+function isVoiceNote(note: Note): note is VoiceNote {
+    return 'audioPath' in note && typeof (note as VoiceNote).audioPath === 'string';
+}
+
+/**
  * Note viewer component - displays a single note's content and metadata
+ * Supports both regular notes and voice notes with audio playback
  */
 export function NoteViewer({ note, onDelete }: NoteViewerProps): React.ReactElement {
     const [isDeleting, setIsDeleting] = React.useState(false);
@@ -40,10 +49,15 @@ export function NoteViewer({ note, onDelete }: NoteViewerProps): React.ReactElem
         return new Date(dateStr).toLocaleString();
     };
 
+    const voiceNote = isVoiceNote(note);
+
     return (
         <div className="note-viewer">
             <header className="note-viewer-header">
-                <h2 className="note-viewer-title">{note.title}</h2>
+                <div className="note-viewer-title-row">
+                    {voiceNote && <span className="note-viewer-voice-badge">🎤</span>}
+                    <h2 className="note-viewer-title">{note.title}</h2>
+                </div>
                 {onDelete && (
                     <button
                         className="note-viewer-delete"
@@ -65,6 +79,13 @@ export function NoteViewer({ note, onDelete }: NoteViewerProps): React.ReactElem
                     )}
                 </span>
             </div>
+
+            {/* Audio player for voice notes */}
+            {voiceNote && (
+                <div className="note-viewer-audio">
+                    <AudioPlayer audioPath={(note as VoiceNote).audioPath} />
+                </div>
+            )}
 
             <div className="note-viewer-content">
                 {note.content}

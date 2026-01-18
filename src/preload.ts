@@ -80,10 +80,26 @@ export interface AIAPI {
     testConnection: (config: ProviderConfig) => Promise<TestConnectionResult>;
 }
 
+// Voice note with audio reference
+export interface VoiceNote extends Note {
+    audioPath: string;
+}
+
+export interface VoiceAPI {
+    saveNote: (audioData: ArrayBuffer, extension?: string) => Promise<VoiceNote>;
+}
+
+// Attachment URL helper (using seedworld:// protocol)
+export interface AttachmentAPI {
+    getUrl: (relativePath: string) => string;
+}
+
 export interface WorldSeedAPI {
     ping: () => Promise<string>;
     vault: VaultAPI;
     ai: AIAPI;
+    voice: VoiceAPI;
+    attachment: AttachmentAPI;
 }
 
 // ============================================================================
@@ -135,5 +151,25 @@ contextBridge.exposeInMainWorld('api', {
 
         testConnection: (config: ProviderConfig): Promise<TestConnectionResult> =>
             ipcRenderer.invoke('ai:testConnection', config),
+    },
+
+    /**
+     * Voice recording operations
+     */
+    voice: {
+        saveNote: (audioData: ArrayBuffer, extension?: string): Promise<VoiceNote> =>
+            ipcRenderer.invoke('voice:saveNote', audioData, extension),
+    },
+
+    /**
+     * Attachment URL helper
+     * Converts relative vault paths to seedworld:// URLs
+     */
+    attachment: {
+        getUrl: (relativePath: string): string => {
+            // Clean up the path (remove leading slashes, normalize)
+            const cleanPath = relativePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+            return `seedworld://vault/${encodeURIComponent(cleanPath)}`;
+        },
     },
 } satisfies WorldSeedAPI);

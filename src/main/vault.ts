@@ -264,8 +264,9 @@ export function saveNote(vaultPath: string, input: NoteInput, existingId?: strin
 
 /**
  * Load a single note by ID
+ * Returns Note or VoiceNote (with audioPath) depending on frontmatter
  */
-export function loadNote(vaultPath: string, noteId: string): Note | null {
+export function loadNote(vaultPath: string, noteId: string): Note | VoiceNote | null {
     const filePath = getNoteFilePath(vaultPath, noteId);
 
     if (!fs.existsSync(filePath)) {
@@ -276,13 +277,23 @@ export function loadNote(vaultPath: string, noteId: string): Note | null {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
         const { data, content } = matter(fileContent);
 
-        return {
+        const note: Note = {
             id: data.id || noteId,
             title: data.title || extractTitle(content),
             content: content.trim(),
             createdAt: data.createdAt || new Date().toISOString(),
             updatedAt: data.updatedAt || new Date().toISOString(),
         };
+
+        // If audioPath exists, return as VoiceNote
+        if (data.audioPath) {
+            return {
+                ...note,
+                audioPath: data.audioPath,
+            } as VoiceNote;
+        }
+
+        return note;
     } catch (error) {
         console.error(`[vault] Failed to load note ${noteId}:`, error);
         return null;
@@ -398,6 +409,189 @@ export function saveStructure(vaultPath: string, structureId: string, content: s
     const filePath = path.join(vaultPath, VAULT_DIRS.structures, `${structureId}.md`);
     atomicWriteFileSync(filePath, content);
     return filePath;
+}
+
+// ============================================================================
+// Audio Operations
+// ============================================================================
+
+/**
+ * Generate an audio ID
+ */
+export function generateAudioId(): string {
+    // Format: a_<short-uuid>
+    return `a_${uuidv4().split('-')[0]}`;
+}
+
+/**
+ * Atomically write binary data to a file
+ */
+export function atomicWriteBinarySync(filePath: string, data: Buffer): void {
+    const tempPath = getTempFilename(filePath);
+    let fd: number | null = null;
+
+    try {
+        // Ensure parent directory exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        // Write to temp file
+        fd = fs.openSync(tempPath, 'w');
+        fs.writeSync(fd, data);
+
+        // fsync to flush to disk (best effort)
+        try {
+            fs.fsyncSync(fd);
+        } catch (fsyncError) {
+            console.warn('[vault] fsync failed (non-fatal):', fsyncError);
+        }
+
+        fs.closeSync(fd);
+        fd = null;
+
+        // Atomic rename
+        fs.renameSync(tempPath, filePath);
+    } catch (error) {
+        // Clean up temp file on error
+        if (fd !== null) {
+            try {
+                fs.closeSync(fd);
+            } catch {
+                // Ignore close errors
+            }
+        }
+
+        try {
+            if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(tempPath);
+            }
+        } catch {
+            // Ignore cleanup errors
+        }
+
+        throw error;
+    }
+}
+
+/**
+ * Save audio file to vault (atomic binary write)
+ * @returns The relative path within the vault (e.g., "attachments/audio/a_abc123.webm")
+ */
+export function saveAudio(vaultPath: string, audioId: string, audioData: Buffer, extension: string = 'webm'): string {
+    ensureVaultStructure(vaultPath);
+    const relativePath = path.join(VAULT_DIRS.attachmentsAudio, `${audioId}.${extension}`);
+    const fullPath = path.join(vaultPath, relativePath);
+    atomicWriteBinarySync(fullPath, audioData);
+    console.log(`[vault] Saved audio: ${relativePath}`);
+    return relativePath;
+}
+
+/**
+ * Get full path to an audio file
+ */
+export function getAudioPath(vaultPath: string, audioId: string, extension: string = 'webm'): string {
+    return path.join(vaultPath, VAULT_DIRS.attachmentsAudio, `${audioId}.${extension}`);
+}
+
+/**
+ * Check if audio file exists
+ */
+export function audioExists(vaultPath: string, audioId: string, extension: string = 'webm'): boolean {
+    const filePath = getAudioPath(vaultPath, audioId, extension);
+    return fs.existsSync(filePath);
+}
+
+// ============================================================================
+// Voice Note Operations
+// ============================================================================
+
+export interface VoiceNoteInput {
+    audioData: Buffer;
+    audioExtension?: string;
+    title?: string;
+    content?: string;
+}
+
+export interface VoiceNote extends Note {
+    audioPath: string;  // Relative path to audio file
+}
+
+/**
+ * Save a voice note (audio + note with reference)
+ * Creates both the audio file and a note linking to it
+ */
+export function saveVoiceNote(vaultPath: string, input: VoiceNoteInput): VoiceNote {
+    ensureVaultStructure(vaultPath);
+
+    const now = new Date().toISOString();
+    const noteId = generateNoteId();
+    const audioId = generateAudioId();
+    const extension = input.audioExtension || 'webm';
+
+    // Save audio file first
+    const audioPath = saveAudio(vaultPath, audioId, input.audioData, extension);
+
+    // Create note with audio reference
+    const title = input.title || `Voice note ${new Date().toLocaleString()}`;
+    const content = input.content || '*(Voice recording - transcription pending)*';
+
+    const voiceNote: VoiceNote = {
+        id: noteId,
+        title,
+        content,
+        audioPath,
+        createdAt: now,
+        updatedAt: now,
+    };
+
+    // Create note file with audio reference in frontmatter
+    const fileContent = matter.stringify(voiceNote.content, {
+        id: voiceNote.id,
+        title: voiceNote.title,
+        audioPath: voiceNote.audioPath,
+        createdAt: voiceNote.createdAt,
+        updatedAt: voiceNote.updatedAt,
+    });
+
+    const notePath = path.join(vaultPath, VAULT_DIRS.notes, `${noteId}.md`);
+    atomicWriteFileSync(notePath, fileContent);
+
+    console.log(`[vault] Created voice note: ${noteId} -> ${audioPath}`);
+    return voiceNote;
+}
+
+/**
+ * Load a note and check if it's a voice note (has audioPath)
+ */
+export function loadVoiceNote(vaultPath: string, noteId: string): VoiceNote | null {
+    const filePath = path.join(vaultPath, VAULT_DIRS.notes, `${noteId}.md`);
+
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+
+    try {
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const { data, content } = matter(fileContent);
+
+        if (!data.audioPath) {
+            return null; // Not a voice note
+        }
+
+        return {
+            id: data.id || noteId,
+            title: data.title || 'Voice note',
+            content: content.trim(),
+            audioPath: data.audioPath,
+            createdAt: data.createdAt || new Date().toISOString(),
+            updatedAt: data.updatedAt || new Date().toISOString(),
+        };
+    } catch (error) {
+        console.error(`[vault] Failed to load voice note ${noteId}:`, error);
+        return null;
+    }
 }
 
 /**

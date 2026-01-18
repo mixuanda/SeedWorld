@@ -30,6 +30,14 @@ export interface NoteIndexEntry {
 }
 
 // ============================================================================
+// Voice Note Types
+// ============================================================================
+
+export interface VoiceNote extends Note {
+    audioPath: string;
+}
+
+// ============================================================================
 // AI Provider Types
 // ============================================================================
 
@@ -80,6 +88,14 @@ export interface AIAPI {
     testConnection: (config: ProviderConfig) => Promise<TestConnectionResult>;
 }
 
+export interface VoiceAPI {
+    saveNote: (audioData: ArrayBuffer, extension?: string) => Promise<VoiceNote>;
+}
+
+export interface AttachmentAPI {
+    getUrl: (relativePath: string) => string;
+}
+
 // ============================================================================
 // Window API
 // ============================================================================
@@ -90,6 +106,8 @@ declare global {
             ping: () => Promise<string>;
             vault: VaultAPI;
             ai: AIAPI;
+            voice: VoiceAPI;
+            attachment: AttachmentAPI;
         };
     }
 }

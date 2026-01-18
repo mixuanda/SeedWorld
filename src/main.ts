@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
 import path from 'node:path';
+import * as fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 import { getVaultPath, setVaultPath, getAIConfig, setAIConfig, getAIConfigForRenderer } from './main/store';
 import {
@@ -11,8 +12,11 @@ import {
   deleteNote,
   rebuildIndex,
   cleanupTempFiles,
+  saveVoiceNote,
   type Note,
   type NoteInput,
+  type VoiceNote,
+  type VoiceNoteInput,
 } from './main/vault';
 import {
   testConnection,
@@ -21,6 +25,9 @@ import {
   type ProviderConfig,
   type LocalProviderConfig,
 } from './main/ai-provider';
+
+// Custom protocol for serving vault files securely
+const VAULT_PROTOCOL = 'seedworld';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -186,6 +193,33 @@ ipcMain.handle('ai:testConnection', async (_event, config: ProviderConfig) => {
   return result;
 });
 
+// --- Voice Note Operations ---
+
+// Save a voice note (audio + note)
+ipcMain.handle('voice:saveNote', (_event, audioArrayBuffer: ArrayBuffer, extension?: string): VoiceNote | null => {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    throw new Error('No vault configured');
+  }
+
+  try {
+    // Convert ArrayBuffer to Buffer
+    const audioData = Buffer.from(audioArrayBuffer);
+
+    const input: VoiceNoteInput = {
+      audioData,
+      audioExtension: extension || 'webm',
+    };
+
+    const voiceNote = saveVoiceNote(vaultPath, input);
+    console.log(`[main] Saved voice note: ${voiceNote.id} with audio at ${voiceNote.audioPath}`);
+    return voiceNote;
+  } catch (error) {
+    console.error('[main] Failed to save voice note:', error);
+    throw error;
+  }
+});
+
 // ============================================================================
 // Window Management
 // ============================================================================
@@ -220,10 +254,127 @@ const createWindow = () => {
   mainWindow.webContents.openDevTools();
 };
 
+// ============================================================================
+// Custom Protocol for Vault Files
+// ============================================================================
+
+/**
+ * Validate that a relative path is safe (no path traversal)
+ */
+function isPathSafe(relativePath: string): boolean {
+  // Normalize and check for path traversal attempts
+  const normalized = path.normalize(relativePath);
+
+  // Reject absolute paths
+  if (path.isAbsolute(normalized)) {
+    return false;
+  }
+
+  // Reject paths that try to escape (contain ..)
+  if (normalized.startsWith('..') || normalized.includes('..\\') || normalized.includes('../')) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Get MIME type from file extension
+ */
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.webm': 'audio/webm',
+    '.ogg': 'audio/ogg',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.m4a': 'audio/mp4',
+    '.mp4': 'video/mp4',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.pdf': 'application/pdf',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+/**
+ * Register the seedworld:// protocol
+ * Only allows access to files within the vault directory
+ */
+function registerVaultProtocol(): void {
+  protocol.handle(VAULT_PROTOCOL, async (request) => {
+    try {
+      // Parse the URL: seedworld://vault/<relativePath>
+      const url = new URL(request.url);
+
+      // Expect: seedworld://vault/attachments/audio/a_xxx.webm
+      if (url.hostname !== 'vault') {
+        console.error('[protocol] Invalid host:', url.hostname);
+        return new Response('Invalid host', { status: 400 });
+      }
+
+      // Get relative path from URL
+      const relativePath = decodeURIComponent(url.pathname.slice(1)); // Remove leading /
+
+      // Security: validate path
+      if (!isPathSafe(relativePath)) {
+        console.error('[protocol] Path traversal attempt blocked:', relativePath);
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      // Get vault path
+      const vaultPath = getVaultPath();
+      if (!vaultPath) {
+        console.error('[protocol] No vault configured');
+        return new Response('Vault not configured', { status: 404 });
+      }
+
+      // Build full path
+      const fullPath = path.join(vaultPath, relativePath);
+
+      // Security: verify path is still within vault (double-check after join)
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedVault = path.resolve(vaultPath);
+      if (!resolvedPath.startsWith(resolvedVault)) {
+        console.error('[protocol] Path escape attempt blocked:', resolvedPath);
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      // Check file exists
+      if (!fs.existsSync(fullPath)) {
+        console.error('[protocol] File not found:', relativePath);
+        return new Response('Not found', { status: 404 });
+      }
+
+      // Read file and return with proper MIME type
+      const data = fs.readFileSync(fullPath);
+      const mimeType = getMimeType(fullPath);
+
+      return new Response(data, {
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Length': data.length.toString(),
+        },
+      });
+    } catch (error) {
+      console.error('[protocol] Error serving file:', error);
+      return new Response('Internal error', { status: 500 });
+    }
+  });
+
+  console.log(`[main] Registered ${VAULT_PROTOCOL}:// protocol`);
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  // Register custom protocol BEFORE creating window
+  registerVaultProtocol();
+  createWindow();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

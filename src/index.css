@@ -255,6 +255,94 @@ body {
   cursor: not-allowed;
 }
 
+/* Capture Actions */
+.capture-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* ============================================================================
+   Voice Recorder
+   ============================================================================ */
+
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-recorder-button {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.voice-recorder-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.voice-recorder-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-recorder-button.recording {
+  border-color: var(--danger);
+  background: rgba(248, 81, 73, 0.1);
+  animation: pulse-recording 1.5s ease-in-out infinite;
+}
+
+.voice-recorder-button.saving {
+  border-color: var(--accent);
+  opacity: 0.7;
+}
+
+@keyframes pulse-recording {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 81, 73, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(248, 81, 73, 0);
+  }
+}
+
+.voice-icon {
+  font-size: 1.25rem;
+}
+
+.voice-icon.recording {
+  animation: none;
+}
+
+.voice-duration {
+  font-size: 0.875rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--danger);
+  min-width: 40px;
+}
+
+.voice-status {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.voice-error {
+  color: var(--danger);
+  cursor: help;
+}
+
 /* ============================================================================
    Split Layout
    ============================================================================ */
@@ -458,6 +546,135 @@ body {
   font-size: 0.875rem;
   margin-top: 8px;
   opacity: 0.7;
+}
+
+/* Voice Note Styling */
+.note-viewer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.note-viewer-voice-badge {
+  font-size: 1rem;
+}
+
+.note-viewer-audio {
+  padding: 16px 20px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ============================================================================
+   Audio Player
+   ============================================================================ */
+
+.audio-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.audio-play-button {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.audio-play-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  background: var(--accent-hover);
+}
+
+.audio-play-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audio-play-button.playing {
+  background: var(--success);
+}
+
+.audio-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audio-seek {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.audio-seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.audio-seek::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.audio-seek:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audio-time {
+  display: flex;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-secondary);
+}
+
+.audio-time-divider {
+  opacity: 0.5;
+}
+
+.audio-speed-button {
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  min-width: 40px;
+}
+
+.audio-speed-button:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.audio-error {
+  color: var(--danger);
 }
 
 /* ============================================================================
