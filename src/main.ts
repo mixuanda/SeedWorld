@@ -29,6 +29,21 @@ import {
 // Custom protocol for serving vault files securely
 const VAULT_PROTOCOL = 'seedworld';
 
+// Register the protocol scheme as privileged (MUST be before app ready)
+// This enables proper media streaming with range requests
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: VAULT_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
@@ -300,8 +315,31 @@ function getMimeType(filePath: string): string {
 }
 
 /**
+ * Parse Range header
+ * @returns [start, end] or null if no valid range
+ */
+function parseRangeHeader(rangeHeader: string | null, fileSize: number): [number, number] | null {
+  if (!rangeHeader) return null;
+
+  // Format: bytes=start-end or bytes=start-
+  const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+  if (!match) return null;
+
+  const start = parseInt(match[1], 10);
+  const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+
+  // Validate range
+  if (start >= fileSize || end >= fileSize || start > end) {
+    return null;
+  }
+
+  return [start, end];
+}
+
+/**
  * Register the seedworld:// protocol
- * Only allows access to files within the vault directory
+ * Supports Range requests for audio/video seeking
+ * Uses streaming to avoid loading entire file into memory
  */
 function registerVaultProtocol(): void {
   protocol.handle(VAULT_PROTOCOL, async (request) => {
@@ -342,20 +380,84 @@ function registerVaultProtocol(): void {
         return new Response('Forbidden', { status: 403 });
       }
 
-      // Check file exists
+      // Check file exists and get stats
       if (!fs.existsSync(fullPath)) {
         console.error('[protocol] File not found:', relativePath);
         return new Response('Not found', { status: 404 });
       }
 
-      // Read file and return with proper MIME type
-      const data = fs.readFileSync(fullPath);
+      const stat = fs.statSync(fullPath);
+      const fileSize = stat.size;
       const mimeType = getMimeType(fullPath);
 
-      return new Response(data, {
+      // Check for Range header (for seeking support)
+      const rangeHeader = request.headers.get('Range');
+      const range = parseRangeHeader(rangeHeader, fileSize);
+
+      if (range) {
+        // Partial content response (206)
+        const [start, end] = range;
+        const chunkSize = end - start + 1;
+
+        // Create readable stream for the range
+        const stream = fs.createReadStream(fullPath, { start, end });
+
+        // Convert Node stream to Web ReadableStream
+        const webStream = new ReadableStream({
+          start(controller) {
+            stream.on('data', (chunk: Buffer) => {
+              controller.enqueue(new Uint8Array(chunk));
+            });
+            stream.on('end', () => {
+              controller.close();
+            });
+            stream.on('error', (err) => {
+              controller.error(err);
+            });
+          },
+          cancel() {
+            stream.destroy();
+          },
+        });
+
+        return new Response(webStream, {
+          status: 206,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Length': chunkSize.toString(),
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+          },
+        });
+      }
+
+      // Full file response (200)
+      const stream = fs.createReadStream(fullPath);
+
+      // Convert Node stream to Web ReadableStream
+      const webStream = new ReadableStream({
+        start(controller) {
+          stream.on('data', (chunk: Buffer) => {
+            controller.enqueue(new Uint8Array(chunk));
+          });
+          stream.on('end', () => {
+            controller.close();
+          });
+          stream.on('error', (err) => {
+            controller.error(err);
+          });
+        },
+        cancel() {
+          stream.destroy();
+        },
+      });
+
+      return new Response(webStream, {
+        status: 200,
         headers: {
           'Content-Type': mimeType,
-          'Content-Length': data.length.toString(),
+          'Content-Length': fileSize.toString(),
+          'Accept-Ranges': 'bytes',
         },
       });
     } catch (error) {
@@ -364,7 +466,7 @@ function registerVaultProtocol(): void {
     }
   });
 
-  console.log(`[main] Registered ${VAULT_PROTOCOL}:// protocol`);
+  console.log(`[main] Registered ${VAULT_PROTOCOL}:// protocol with Range support`);
 }
 
 // This method will be called when Electron has finished
