@@ -119,3 +119,19 @@ export function getAIConfigForRenderer(): Omit<ProviderConfig, 'apiKey'> | null 
         return safeConfig as Omit<ProviderConfig, 'apiKey'>;
     }
 }
+
+// ============================================================================
+// Whisper Manifest URL
+// ============================================================================
+
+export function getWhisperManifestUrl(): string | null {
+    const data = loadStore();
+    return (data as StoreData & { whisperManifestUrl?: string }).whisperManifestUrl || null;
+}
+
+export function setWhisperManifestUrl(url: string): void {
+    const data = loadStore() as StoreData & { whisperManifestUrl?: string };
+    data.whisperManifestUrl = url;
+    saveStore(data as StoreData);
+    console.log('[store] Whisper manifest URL updated:', url);
+}
