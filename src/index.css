@@ -8,6 +8,7 @@
   --accent: #58a6ff;
   --accent-hover: #79b8ff;
   --success: #3fb950;
+  --danger: #f85149;
   --border: #30363d;
   --radius: 8px;
 }
@@ -18,7 +19,9 @@
   padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
@@ -29,11 +32,135 @@ body {
   line-height: 1.5;
 }
 
+/* ============================================================================
+   Loading State
+   ============================================================================ */
+
+.app-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+   Vault Setup
+   ============================================================================ */
+
+.vault-setup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+}
+
+.vault-setup-content {
+  max-width: 480px;
+  text-align: center;
+}
+
+.vault-setup-icon {
+  font-size: 4rem;
+  margin-bottom: 16px;
+}
+
+.vault-setup h1 {
+  font-size: 1.75rem;
+  margin-bottom: 12px;
+}
+
+.vault-setup-description {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.vault-setup-features {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+  text-align: left;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.feature-icon {
+  font-size: 1.25rem;
+}
+
+.vault-setup-button {
+  padding: 12px 32px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.vault-setup-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.vault-setup-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.vault-setup-error {
+  color: var(--danger);
+  margin-top: 16px;
+}
+
+.vault-setup-hint {
+  margin-top: 24px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.vault-setup-hint code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ============================================================================
+   Main App Layout
+   ============================================================================ */
+
 .app {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 24px;
+  padding: 20px;
+  gap: 16px;
 }
 
 /* Header */
@@ -41,53 +168,53 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .header h1 {
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.header-right {
   display: flex;
-  align-items: center;
   gap: 8px;
 }
 
-.ping-status {
+.ping-status,
+.vault-status {
   font-size: 0.75rem;
-  color: var(--success);
-  background: rgba(63, 185, 80, 0.1);
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 12px;
+  background: rgba(63, 185, 80, 0.1);
+  color: var(--success);
 }
 
-/* Main Content */
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  flex: 1;
-  overflow: hidden;
+.vault-status {
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--accent);
 }
 
 /* Capture Section */
 .capture-section {
   display: flex;
-  flex-direction: column;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .note-input {
-  width: 100%;
-  min-height: 120px;
-  padding: 16px;
+  flex: 1;
+  min-height: 80px;
+  max-height: 150px;
+  padding: 12px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   resize: vertical;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -100,6 +227,10 @@ body {
 
 .note-input::placeholder {
   color: var(--text-secondary);
+}
+
+.note-input:disabled {
+  opacity: 0.6;
 }
 
 .save-button {
@@ -124,29 +255,46 @@ body {
   cursor: not-allowed;
 }
 
-/* Notes Section */
-.notes-section {
-  flex: 1;
-  overflow: hidden;
+/* ============================================================================
+   Split Layout
+   ============================================================================ */
+
+.main-split {
   display: flex;
-  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.notes-section h2 {
-  font-size: 1rem;
+.panel-left {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-left h2 {
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
-.empty-state {
-  color: var(--text-secondary);
-  font-style: italic;
-  padding: 24px;
-  text-align: center;
+.panel-right {
+  flex: 1;
+  min-width: 0;
   background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
+  overflow: hidden;
 }
+
+/* ============================================================================
+   Notes List
+   ============================================================================ */
 
 .notes-list {
   list-style: none;
@@ -154,48 +302,168 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-/* Note Card */
-.note-card {
+.notes-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.notes-list-empty .hint {
+  font-size: 0.875rem;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.notes-list-item {
+  padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: border-color 0.2s;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 
-.note-card:hover {
+.notes-list-item:hover {
   border-color: var(--accent);
 }
 
-.note-id {
+.notes-list-item.selected {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.05);
+}
+
+.notes-list-item-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notes-list-item-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.notes-list-item-id {
   font-family: 'SF Mono', 'Fira Code', monospace;
+  opacity: 0.7;
+}
+
+.notes-list-item-preview {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================================
+   Note Viewer
+   ============================================================================ */
+
+.note-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.note-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.note-viewer-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.note-viewer-delete {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  padding: 4px 8px;
+}
+
+.note-viewer-delete:hover {
+  opacity: 1;
+}
+
+.note-viewer-delete:disabled {
+  opacity: 0.3;
+  cursor: wait;
+}
+
+.note-viewer-meta {
+  display: flex;
+  gap: 16px;
+  padding: 12px 20px;
   font-size: 0.75rem;
   color: var(--text-secondary);
   background: var(--bg-tertiary);
+}
+
+.note-viewer-id {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: var(--bg-primary);
   padding: 2px 6px;
   border-radius: 4px;
-  align-self: flex-start;
 }
 
-.note-content {
-  font-size: 0.9375rem;
-  line-height: 1.6;
+.note-viewer-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.7;
 }
 
-.note-time {
-  font-size: 0.75rem;
+.note-viewer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
   color: var(--text-secondary);
+  text-align: center;
 }
 
-/* Scrollbar */
+.note-viewer-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.note-viewer-empty .hint {
+  font-size: 0.875rem;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+/* ============================================================================
+   Scrollbar
+   ============================================================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
 }
