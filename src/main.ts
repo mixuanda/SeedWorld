@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { getVaultPath, setVaultPath } from './main/store';
+import { getVaultPath, setVaultPath, getAIConfig, setAIConfig, getAIConfigForRenderer } from './main/store';
 import {
   ensureVaultStructure,
   isValidVault,
@@ -10,9 +10,17 @@ import {
   loadAllNotes,
   deleteNote,
   rebuildIndex,
+  cleanupTempFiles,
   type Note,
   type NoteInput,
 } from './main/vault';
+import {
+  testConnection,
+  validateConfig,
+  getSafeConfigForLogging,
+  type ProviderConfig,
+  type LocalProviderConfig,
+} from './main/ai-provider';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -58,10 +66,17 @@ ipcMain.handle('vault:selectFolder', async () => {
   }
 });
 
-// Get current vault path
+// Get current vault path (also ensures structure and cleans up on startup)
 ipcMain.handle('vault:getPath', () => {
   const vaultPath = getVaultPath();
   if (vaultPath && isValidVault(vaultPath)) {
+    // Ensure all subdirectories exist (safe if OneDrive removed some)
+    ensureVaultStructure(vaultPath);
+    // Clean up any orphaned temp files from interrupted writes
+    const cleaned = cleanupTempFiles(vaultPath);
+    if (cleaned > 0) {
+      console.log(`[main] Cleaned up ${cleaned} orphaned temp file(s)`);
+    }
     return vaultPath;
   }
   return null;
@@ -133,6 +148,42 @@ ipcMain.handle('vault:rebuildIndex', () => {
   }
 
   return rebuildIndex(vaultPath);
+});
+
+// --- AI Provider Operations ---
+
+// Get current AI config (safe for renderer - no API keys)
+ipcMain.handle('ai:getConfig', () => {
+  return getAIConfigForRenderer();
+});
+
+// Set AI config (stores in main process only)
+ipcMain.handle('ai:setConfig', (_event, config: ProviderConfig) => {
+  const validation = validateConfig(config);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  setAIConfig(config);
+  console.log('[main] AI config saved:', getSafeConfigForLogging(config));
+  return true;
+});
+
+// Test AI connection
+ipcMain.handle('ai:testConnection', async (_event, config: ProviderConfig) => {
+  const validation = validateConfig(config);
+  if (!validation.valid) {
+    return {
+      success: false,
+      message: validation.error,
+      latencyMs: 0,
+    };
+  }
+
+  console.log('[main] Testing AI connection:', getSafeConfigForLogging(config));
+  const result = await testConnection(config);
+  console.log('[main] Test result:', result.success ? 'SUCCESS' : 'FAILED', `(${result.latencyMs}ms)`);
+  return result;
 });
 
 // ============================================================================

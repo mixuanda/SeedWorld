@@ -461,6 +461,292 @@ body {
 }
 
 /* ============================================================================
+   Settings Button
+   ============================================================================ */
+
+.settings-button {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.settings-button:hover {
+  opacity: 1;
+}
+
+/* ============================================================================
+   Settings Panel
+   ============================================================================ */
+
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.settings-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.settings-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.settings-close:hover {
+  color: var(--text-primary);
+}
+
+.settings-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.settings-hint {
+  display: block;
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* Radio Group */
+.settings-radio-group {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-radio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.settings-radio:hover {
+  border-color: var(--accent);
+}
+
+.settings-radio.active {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.05);
+}
+
+.settings-radio.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-radio.disabled:hover {
+  border-color: var(--border);
+}
+
+.settings-radio input {
+  display: none;
+}
+
+.radio-icon {
+  font-size: 1.5rem;
+}
+
+.radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.radio-text strong {
+  font-size: 0.875rem;
+}
+
+.radio-text small {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Test Button */
+.settings-test-button {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.settings-test-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.settings-test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Test Result */
+.settings-test-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.settings-test-result.success {
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid var(--success);
+}
+
+.settings-test-result.error {
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--danger);
+}
+
+.test-status {
+  margin-bottom: 4px;
+}
+
+.test-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.settings-error {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 0.875rem;
+}
+
+/* Footer */
+.settings-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+
+.settings-cancel {
+  padding: 8px 16px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.settings-cancel:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.settings-save {
+  padding: 8px 20px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.settings-save:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.settings-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
    Scrollbar
    ============================================================================ */
 

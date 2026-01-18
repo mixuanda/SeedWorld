@@ -33,6 +33,37 @@ export interface NoteIndexEntry {
     updatedAt: string;
 }
 
+// --- AI Provider Types ---
+
+export type ProviderMode = 'local' | 'online';
+
+export interface LocalProviderConfig {
+    mode: 'local';
+    baseUrl: string;
+    model: string;
+}
+
+export interface OnlineProviderConfig {
+    mode: 'online';
+    provider: 'openai' | 'gemini';
+    apiKey: string;
+    model: string;
+}
+
+export type ProviderConfig = LocalProviderConfig | OnlineProviderConfig;
+
+// Safe version for renderer (no API keys)
+export type SafeProviderConfig = LocalProviderConfig | Omit<OnlineProviderConfig, 'apiKey'>;
+
+export interface TestConnectionResult {
+    success: boolean;
+    message: string;
+    latencyMs: number;
+    model?: string;
+}
+
+// --- API Interfaces ---
+
 export interface VaultAPI {
     selectFolder: () => Promise<string | null>;
     getPath: () => Promise<string | null>;
@@ -43,9 +74,16 @@ export interface VaultAPI {
     rebuildIndex: () => Promise<NoteIndex | null>;
 }
 
+export interface AIAPI {
+    getConfig: () => Promise<SafeProviderConfig | null>;
+    setConfig: (config: ProviderConfig) => Promise<boolean>;
+    testConnection: (config: ProviderConfig) => Promise<TestConnectionResult>;
+}
+
 export interface WorldSeedAPI {
     ping: () => Promise<string>;
     vault: VaultAPI;
+    ai: AIAPI;
 }
 
 // ============================================================================
@@ -82,5 +120,20 @@ contextBridge.exposeInMainWorld('api', {
 
         rebuildIndex: (): Promise<NoteIndex | null> =>
             ipcRenderer.invoke('vault:rebuildIndex'),
+    },
+
+    /**
+     * AI provider operations
+     * Note: API keys are never exposed to renderer
+     */
+    ai: {
+        getConfig: (): Promise<SafeProviderConfig | null> =>
+            ipcRenderer.invoke('ai:getConfig'),
+
+        setConfig: (config: ProviderConfig): Promise<boolean> =>
+            ipcRenderer.invoke('ai:setConfig', config),
+
+        testConnection: (config: ProviderConfig): Promise<TestConnectionResult> =>
+            ipcRenderer.invoke('ai:testConnection', config),
     },
 } satisfies WorldSeedAPI);

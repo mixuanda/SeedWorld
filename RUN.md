@@ -49,6 +49,41 @@ The app runs with strict Electron security settings:
 
 All privileged operations go through the preload bridge (`window.api`).
 
+---
+
+## Vault Structure
+
+The vault is a user-selected folder (recommend OneDrive) with this structure:
+
+```
+vault/
+├── notes/              # Atomic notes (.md with YAML frontmatter)
+├── attachments/
+│   └── audio/          # Audio recordings
+├── transcripts/        # Audio transcriptions
+├── changesets/         # AI-generated ChangeSets (.json)
+└── structures/         # Synthesized structure documents
+```
+
+**On startup**, missing subdirectories are recreated automatically.
+
+---
+
+## Atomic Writes
+
+All vault writes use atomic operations to prevent corruption:
+
+1. Write to temp file (`.n_abc123.xyz789.tmp`)
+2. `fsync` the file (best effort)
+3. Rename to final filename (atomic on most filesystems)
+
+**Benefits:**
+- Interrupted writes (crash, kill) don't corrupt existing files
+- Worst case: orphaned `.tmp` file (cleaned up on next startup)
+- OneDrive-safe: no partial syncs of incomplete files
+
+---
+
 ## Verify IPC
 
 Open DevTools (Ctrl+Shift+I) and run in the console:
@@ -56,4 +91,7 @@ Open DevTools (Ctrl+Shift+I) and run in the console:
 ```javascript
 await window.api.ping()
 // Expected: "pong"
+
+await window.api.vault.getPath()
+// Expected: "C:\\Users\\...\\OneDrive\\WorldSeed" (or null if not set)
 ```

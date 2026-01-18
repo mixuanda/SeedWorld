@@ -3,6 +3,7 @@ import type { Note, NoteInput } from './global';
 import { VaultSetup } from './components/VaultSetup';
 import { NotesList } from './components/NotesList';
 import { NoteViewer } from './components/NoteViewer';
+import { Settings } from './components/Settings';
 
 type AppState = 'loading' | 'setup' | 'ready';
 
@@ -14,6 +15,7 @@ export function App(): React.ReactElement {
     // App state
     const [appState, setAppState] = useState<AppState>('loading');
     const [vaultPath, setVaultPath] = useState<string | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
 
     // Notes state
     const [notes, setNotes] = useState<Note[]>([]);
@@ -144,6 +146,11 @@ export function App(): React.ReactElement {
     // Ready state - show main UI
     return (
         <div className="app">
+            {/* Settings Modal */}
+            {showSettings && (
+                <Settings onClose={() => setShowSettings(false)} />
+            )}
+
             {/* Header */}
             <header className="header">
                 <h1>📥 Inbox</h1>
@@ -158,6 +165,13 @@ export function App(): React.ReactElement {
                             📁 Vault
                         </span>
                     )}
+                    <button
+                        className="settings-button"
+                        onClick={() => setShowSettings(true)}
+                        title="Settings"
+                    >
+                        ⚙️
+                    </button>
                 </div>
             </header>
 

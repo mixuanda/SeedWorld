@@ -1,10 +1,16 @@
 /**
  * Vault service for World-Seed
  * Handles file-based note storage with YAML frontmatter
+ * 
+ * Features:
+ * - Atomic writes (temp file + fsync + rename) to prevent corruption
+ * - Full vault folder structure for all content types
+ * - OneDrive-friendly (recreates missing subfolders safely)
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import matter from 'gray-matter';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -38,23 +44,38 @@ export interface NoteIndexEntry {
 }
 
 // ============================================================================
-// Vault Structure
+// Vault Directory Structure
 // ============================================================================
 
-const NOTES_DIR = 'notes';
+/**
+ * All vault subdirectories
+ * These are recreated on startup if missing
+ */
+export const VAULT_DIRS = {
+    notes: 'notes',
+    attachmentsAudio: 'attachments/audio',
+    transcripts: 'transcripts',
+    changesets: 'changesets',
+    structures: 'structures',
+} as const;
 
 /**
- * Ensure vault directory structure exists
+ * Ensure all vault subdirectories exist
+ * Safe to call multiple times; creates missing folders
  */
 export function ensureVaultStructure(vaultPath: string): void {
-    const notesDir = path.join(vaultPath, NOTES_DIR);
-
+    // Create vault root if needed
     if (!fs.existsSync(vaultPath)) {
         fs.mkdirSync(vaultPath, { recursive: true });
     }
 
-    if (!fs.existsSync(notesDir)) {
-        fs.mkdirSync(notesDir, { recursive: true });
+    // Create all subdirectories
+    for (const subdir of Object.values(VAULT_DIRS)) {
+        const fullPath = path.join(vaultPath, subdir);
+        if (!fs.existsSync(fullPath)) {
+            fs.mkdirSync(fullPath, { recursive: true });
+            console.log(`[vault] Created directory: ${subdir}`);
+        }
     }
 }
 
@@ -63,13 +84,106 @@ export function ensureVaultStructure(vaultPath: string): void {
  */
 export function isValidVault(vaultPath: string): boolean {
     try {
-        const notesDir = path.join(vaultPath, NOTES_DIR);
-        // Check if we can access the directory
+        // Check read/write access to vault root
         fs.accessSync(vaultPath, fs.constants.R_OK | fs.constants.W_OK);
+        // Check notes directory exists (minimum requirement)
+        const notesDir = path.join(vaultPath, VAULT_DIRS.notes);
         return fs.existsSync(notesDir);
     } catch {
         return false;
     }
+}
+
+// ============================================================================
+// Atomic Write Helper
+// ============================================================================
+
+/**
+ * Generate a temporary filename for atomic writes
+ */
+function getTempFilename(finalPath: string): string {
+    const dir = path.dirname(finalPath);
+    const ext = path.extname(finalPath);
+    const base = path.basename(finalPath, ext);
+    const random = crypto.randomBytes(4).toString('hex');
+    return path.join(dir, `.${base}.${random}.tmp`);
+}
+
+/**
+ * Atomically write content to a file
+ * 
+ * Strategy:
+ * 1. Write to a temp file in the same directory
+ * 2. fsync the file descriptor (best effort)
+ * 3. Rename temp file to final filename (atomic on most filesystems)
+ * 
+ * This ensures that interrupted writes don't corrupt existing files.
+ * The worst case is an orphaned .tmp file, not a corrupted .md file.
+ * 
+ * @param filePath - Final destination path
+ * @param content - File content to write
+ * @param encoding - File encoding (default: utf-8)
+ */
+export function atomicWriteFileSync(
+    filePath: string,
+    content: string,
+    encoding: BufferEncoding = 'utf-8'
+): void {
+    const tempPath = getTempFilename(filePath);
+    let fd: number | null = null;
+
+    try {
+        // Ensure parent directory exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        // Write to temp file
+        fd = fs.openSync(tempPath, 'w');
+        fs.writeSync(fd, content, null, encoding);
+
+        // fsync to flush to disk (best effort - may not work on all systems)
+        try {
+            fs.fsyncSync(fd);
+        } catch (fsyncError) {
+            // fsync may fail on some systems/filesystems, continue anyway
+            console.warn('[vault] fsync failed (non-fatal):', fsyncError);
+        }
+
+        fs.closeSync(fd);
+        fd = null;
+
+        // Atomic rename
+        fs.renameSync(tempPath, filePath);
+    } catch (error) {
+        // Clean up temp file on error
+        if (fd !== null) {
+            try {
+                fs.closeSync(fd);
+            } catch {
+                // Ignore close errors
+            }
+        }
+
+        try {
+            if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(tempPath);
+            }
+        } catch {
+            // Ignore cleanup errors
+        }
+
+        throw error;
+    }
+}
+
+/**
+ * Atomically write JSON to a file
+ */
+export function atomicWriteJsonSync(filePath: string, data: unknown): void {
+    const content = JSON.stringify(data, null, 2);
+    atomicWriteFileSync(filePath, content, 'utf-8');
 }
 
 // ============================================================================
@@ -88,7 +202,7 @@ export function generateNoteId(): string {
  * Get the file path for a note
  */
 function getNoteFilePath(vaultPath: string, noteId: string): string {
-    return path.join(vaultPath, NOTES_DIR, `${noteId}.md`);
+    return path.join(vaultPath, VAULT_DIRS.notes, `${noteId}.md`);
 }
 
 /**
@@ -105,7 +219,7 @@ function extractTitle(content: string): string {
 }
 
 /**
- * Save a note to the vault
+ * Save a note to the vault (using atomic write)
  */
 export function saveNote(vaultPath: string, input: NoteInput, existingId?: string): Note {
     ensureVaultStructure(vaultPath);
@@ -142,7 +256,8 @@ export function saveNote(vaultPath: string, input: NoteInput, existingId?: strin
         updatedAt: note.updatedAt,
     });
 
-    fs.writeFileSync(filePath, fileContent, 'utf-8');
+    // Use atomic write to prevent corruption
+    atomicWriteFileSync(filePath, fileContent);
 
     return note;
 }
@@ -169,7 +284,7 @@ export function loadNote(vaultPath: string, noteId: string): Note | null {
             updatedAt: data.updatedAt || new Date().toISOString(),
         };
     } catch (error) {
-        console.error(`Failed to load note ${noteId}:`, error);
+        console.error(`[vault] Failed to load note ${noteId}:`, error);
         return null;
     }
 }
@@ -178,7 +293,7 @@ export function loadNote(vaultPath: string, noteId: string): Note | null {
  * Load all notes from the vault
  */
 export function loadAllNotes(vaultPath: string): Note[] {
-    const notesDir = path.join(vaultPath, NOTES_DIR);
+    const notesDir = path.join(vaultPath, VAULT_DIRS.notes);
 
     if (!fs.existsSync(notesDir)) {
         return [];
@@ -215,7 +330,7 @@ export function deleteNote(vaultPath: string, noteId: string): boolean {
         fs.unlinkSync(filePath);
         return true;
     } catch (error) {
-        console.error(`Failed to delete note ${noteId}:`, error);
+        console.error(`[vault] Failed to delete note ${noteId}:`, error);
         return false;
     }
 }
@@ -242,4 +357,77 @@ export function rebuildIndex(vaultPath: string): NoteIndex {
     };
 
     return index;
+}
+
+// ============================================================================
+// Utility Functions for Other Vault Content
+// ============================================================================
+
+/**
+ * Get path to a specific vault subdirectory
+ */
+export function getVaultSubdir(vaultPath: string, subdir: keyof typeof VAULT_DIRS): string {
+    return path.join(vaultPath, VAULT_DIRS[subdir]);
+}
+
+/**
+ * Save a changeset JSON file (atomic)
+ */
+export function saveChangeset(vaultPath: string, changesetId: string, data: unknown): string {
+    ensureVaultStructure(vaultPath);
+    const filePath = path.join(vaultPath, VAULT_DIRS.changesets, `${changesetId}.json`);
+    atomicWriteJsonSync(filePath, data);
+    return filePath;
+}
+
+/**
+ * Save a transcript file (atomic)
+ */
+export function saveTranscript(vaultPath: string, transcriptId: string, content: string): string {
+    ensureVaultStructure(vaultPath);
+    const filePath = path.join(vaultPath, VAULT_DIRS.transcripts, `${transcriptId}.md`);
+    atomicWriteFileSync(filePath, content);
+    return filePath;
+}
+
+/**
+ * Save a structure document (atomic)
+ */
+export function saveStructure(vaultPath: string, structureId: string, content: string): string {
+    ensureVaultStructure(vaultPath);
+    const filePath = path.join(vaultPath, VAULT_DIRS.structures, `${structureId}.md`);
+    atomicWriteFileSync(filePath, content);
+    return filePath;
+}
+
+/**
+ * Clean up orphaned temp files (call on startup)
+ */
+export function cleanupTempFiles(vaultPath: string): number {
+    let cleaned = 0;
+
+    for (const subdir of Object.values(VAULT_DIRS)) {
+        const dirPath = path.join(vaultPath, subdir);
+        if (!fs.existsSync(dirPath)) continue;
+
+        try {
+            const files = fs.readdirSync(dirPath);
+            for (const file of files) {
+                if (file.startsWith('.') && file.endsWith('.tmp')) {
+                    const filePath = path.join(dirPath, file);
+                    try {
+                        fs.unlinkSync(filePath);
+                        cleaned++;
+                        console.log(`[vault] Cleaned up orphaned temp file: ${file}`);
+                    } catch {
+                        // Ignore cleanup errors
+                    }
+                }
+            }
+        } catch {
+            // Ignore directory read errors
+        }
+    }
+
+    return cleaned;
 }
