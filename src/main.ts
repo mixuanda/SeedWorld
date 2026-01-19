@@ -266,7 +266,9 @@ const createWindow = () => {
   }
 
   // Open the DevTools in development
-  mainWindow.webContents.openDevTools();
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // ============================================================================

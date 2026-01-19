@@ -27,6 +27,8 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
 
         const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
         const handleDurationChange = () => setDuration(audio.duration);
+        const handlePlay = () => setIsPlaying(true);
+        const handlePause = () => setIsPlaying(false);
         const handleEnded = () => setIsPlaying(false);
         const handleError = () => {
             setError('Failed to load audio');
@@ -36,6 +38,8 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
 
         audio.addEventListener('timeupdate', handleTimeUpdate);
         audio.addEventListener('durationchange', handleDurationChange);
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
         audio.addEventListener('ended', handleEnded);
         audio.addEventListener('error', handleError);
         audio.addEventListener('canplay', handleCanPlay);
@@ -43,6 +47,8 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
         return () => {
             audio.removeEventListener('timeupdate', handleTimeUpdate);
             audio.removeEventListener('durationchange', handleDurationChange);
+            audio.removeEventListener('play', handlePlay);
+            audio.removeEventListener('pause', handlePause);
             audio.removeEventListener('ended', handleEnded);
             audio.removeEventListener('error', handleError);
             audio.removeEventListener('canplay', handleCanPlay);
@@ -60,7 +66,7 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
         const audio = audioRef.current;
         if (!audio) return;
 
-        if (isPlaying) {
+        if (!audio.paused) {
             audio.pause();
         } else {
             audio.play().catch(err => {
@@ -68,7 +74,6 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
                 setError('Failed to play audio');
             });
         }
-        setIsPlaying(!isPlaying);
     };
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
