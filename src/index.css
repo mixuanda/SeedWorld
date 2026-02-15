@@ -572,6 +572,12 @@ body {
 
 .audio-player {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-player-row {
+  display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
@@ -675,6 +681,24 @@ body {
 
 .audio-error {
   color: var(--danger);
+}
+
+.audio-error-panel {
+  padding: 10px 12px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 0.8125rem;
+}
+
+.audio-error-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.audio-error-message {
+  color: var(--text-primary);
 }
 
 /* ============================================================================
@@ -917,6 +941,76 @@ body {
   border-radius: var(--radius);
   color: var(--danger);
   font-size: 0.875rem;
+}
+
+.whisper-status {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  margin-top: 8px;
+}
+
+.whisper-status-label {
+  color: var(--text-secondary);
+}
+
+.whisper-status-value {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.whisper-model-select {
+  margin-top: 12px;
+}
+
+.whisper-select {
+  cursor: pointer;
+}
+
+.whisper-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.whisper-actions button {
+  flex: 1;
+}
+
+.whisper-message {
+  margin-top: 10px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.whisper-progress {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.whisper-progress-text {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.whisper-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.whisper-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
 }
 
 /* Footer */

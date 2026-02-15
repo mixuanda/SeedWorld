@@ -92,6 +92,41 @@ export interface VoiceAPI {
 // Attachment URL helper (using seedworld:// protocol)
 export interface AttachmentAPI {
     getUrl: (relativePath: string) => string;
+    getStreamUrl: (relativePath: string) => Promise<string>;
+}
+
+// Whisper Add-on status
+export interface WhisperStatus {
+    platformKey: string;
+    supported: boolean;
+    installed: boolean;
+    state: 'unsupported' | 'not_installed' | 'installed' | 'broken';
+    version: string | null;
+    model: string | null;
+    availableModels: string[];
+    sizeBytes: number | null;
+    message: string | null;
+    health?: {
+        ok: boolean;
+        exitCode: number | null;
+        stderr: string | null;
+    };
+}
+
+export interface WhisperProgress {
+    stage: 'downloading' | 'verifying' | 'extracting' | 'installing';
+    percent: number | null;
+    transferredBytes: number;
+    totalBytes: number | null;
+    message: string;
+}
+
+export interface WhisperAPI {
+    getStatus: () => Promise<WhisperStatus>;
+    install: (model?: string) => Promise<WhisperStatus>;
+    uninstall: () => Promise<WhisperStatus>;
+    ensureInstalled: (model?: string) => Promise<WhisperStatus>;
+    onProgress: (callback: (progress: WhisperProgress) => void) => () => void;
 }
 
 export interface WorldSeedAPI {
@@ -100,6 +135,7 @@ export interface WorldSeedAPI {
     ai: AIAPI;
     voice: VoiceAPI;
     attachment: AttachmentAPI;
+    whisper: WhisperAPI;
 }
 
 // ============================================================================
@@ -170,6 +206,36 @@ contextBridge.exposeInMainWorld('api', {
             // Clean up the path (remove leading slashes, normalize)
             const cleanPath = relativePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
             return `seedworld://vault/${encodeURIComponent(cleanPath)}`;
+        },
+        getStreamUrl: (relativePath: string): Promise<string> => {
+            return ipcRenderer.invoke('attachment:getStreamUrl', relativePath);
+        },
+    },
+
+    /**
+     * Whisper add-on operations
+     */
+    whisper: {
+        getStatus: (): Promise<WhisperStatus> =>
+            ipcRenderer.invoke('whisper:getStatus'),
+
+        install: (model?: string): Promise<WhisperStatus> =>
+            ipcRenderer.invoke('whisper:install', model),
+
+        uninstall: (): Promise<WhisperStatus> =>
+            ipcRenderer.invoke('whisper:uninstall'),
+
+        ensureInstalled: (model?: string): Promise<WhisperStatus> =>
+            ipcRenderer.invoke('whisper:ensureInstalled', model),
+
+        onProgress: (callback: (progress: WhisperProgress) => void): (() => void) => {
+            const handler = (_event: Electron.IpcRendererEvent, progress: WhisperProgress) => {
+                callback(progress);
+            };
+            ipcRenderer.on('whisper:progress', handler);
+            return () => {
+                ipcRenderer.removeListener('whisper:progress', handler);
+            };
         },
     },
 } satisfies WorldSeedAPI);

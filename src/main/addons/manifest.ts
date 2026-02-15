@@ -1,240 +1,215 @@
 /**
- * Whisper Add-on Manifest Handler
- * 
- * Fetches and parses remote manifest for Whisper binary downloads.
- * Caches manifest locally for offline reference.
+ * Whisper Add-on Manifest Resolver
+ *
+ * Resolves whispercpp manifest from the registry index with optional override.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import * as http from 'node:http';
 import * as https from 'node:https';
-import { app } from 'electron';
 import { getWhisperManifestUrl } from '../store';
 
-// ============================================================================
-// Types
-// ============================================================================
+const WHISPER_ADDON_ID = 'whispercpp';
+const REGISTRY_INDEX_URL = 'https://raw.githubusercontent.com/mixuanda/seedworld-addons/main/manifests/index.json';
+const REGISTRY_BASE_URL = 'https://raw.githubusercontent.com/mixuanda/seedworld-addons/main/manifests/';
+const MAX_REDIRECTS = 5;
 
-export interface PlatformAsset {
-    url: string;
-    sha256: string;
-    bytes: number;
-    minOS?: string;  // e.g., "10.0" for Windows 10, "12.0" for macOS Monterey
+export const DEFAULT_WHISPER_MODELS = ['tiny', 'base', 'small'] as const;
+
+export const SUPPORTED_PLATFORMS = ['win32-x64', 'darwin-arm64', 'darwin-x64'] as const;
+
+export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number];
+
+export interface WhisperRegistryIndex {
+    version: number;
+    manifests: Array<{ addonId: string; path: string }>;
 }
 
-export interface ModelInfo {
-    name: string;
+export interface WhisperPackage {
     url: string;
-    sha256: string;
-    bytes: number;
+    sha256?: string;
+    bytes?: number;
 }
+
+export interface WhisperPackageSet {
+    default?: WhisperPackage;
+    blas?: WhisperPackage;
+    binCandidates?: string[];
+}
+
+export type WhisperModelEntry = string | { url: string; sha256?: string; bytes?: number };
 
 export interface WhisperManifest {
-    version: string;
-    releaseDate: string;
-    platforms: {
-        'win32-x64'?: PlatformAsset;
-        'darwin-arm64'?: PlatformAsset;
-        'darwin-x64'?: PlatformAsset;
-        'linux-x64'?: PlatformAsset;
-    };
-    models: {
-        base: ModelInfo;
-        small: ModelInfo;
-        tiny?: ModelInfo;
-        medium?: ModelInfo;
-    };
+    addonId: string;
+    name: string;
+    description?: string;
+    version?: string;
+    defaultModel?: string;
+    packages?: Record<string, Record<string, WhisperPackageSet>>;
+    models?: Record<string, WhisperModelEntry>;
 }
 
-// ============================================================================
-// Default Manifest (fallback for development)
-// ============================================================================
-
-/**
- * Default manifest URL - can be overridden in settings
- */
-export const DEFAULT_MANIFEST_URL = 'https://raw.githubusercontent.com/example/whisper-releases/main/manifest.json';
-
-/**
- * Placeholder manifest for development
- * Replace with real URLs when hosting is set up
- */
-const PLACEHOLDER_MANIFEST: WhisperManifest = {
-    version: '1.0.0',
-    releaseDate: '2026-01-18',
-    platforms: {
-        'win32-x64': {
-            url: 'https://example.com/whisper-win32-x64.zip',
-            sha256: 'placeholder_sha256_for_windows',
-            bytes: 10_000_000, // ~10MB placeholder
-            minOS: '10.0',
-        },
-        'darwin-arm64': {
-            url: 'https://example.com/whisper-darwin-arm64.zip',
-            sha256: 'placeholder_sha256_for_macos_arm',
-            bytes: 8_000_000,
-            minOS: '12.0',
-        },
-        'darwin-x64': {
-            url: 'https://example.com/whisper-darwin-x64.zip',
-            sha256: 'placeholder_sha256_for_macos_x64',
-            bytes: 8_000_000,
-            minOS: '12.0',
-        },
-    },
-    models: {
-        base: {
-            name: 'ggml-base.bin',
-            url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-            sha256: 'placeholder_sha256_for_base_model',
-            bytes: 142_000_000, // ~142MB
-        },
-        small: {
-            name: 'ggml-small.bin',
-            url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-            sha256: 'placeholder_sha256_for_small_model',
-            bytes: 488_000_000, // ~488MB
-        },
-    },
-};
-
-// ============================================================================
-// Manifest Cache
-// ============================================================================
-
-function getManifestCachePath(): string {
-    return path.join(app.getPath('userData'), 'addons', 'whisper-manifest.json');
+export interface ResolvedWhisperManifest {
+    manifest: WhisperManifest;
+    manifestUrl: string;
 }
 
-function loadCachedManifest(): WhisperManifest | null {
-    const cachePath = getManifestCachePath();
-
-    try {
-        if (fs.existsSync(cachePath)) {
-            const content = fs.readFileSync(cachePath, 'utf-8');
-            return JSON.parse(content) as WhisperManifest;
-        }
-    } catch (error) {
-        console.error('[manifest] Failed to load cached manifest:', error);
-    }
-
-    return null;
+export interface ResolvedWhisperPackage {
+    platformKey: string;
+    osKey: string;
+    arch: string;
+    variant: 'default' | 'blas';
+    package: WhisperPackage;
+    binCandidates: string[];
 }
 
-function saveCachedManifest(manifest: WhisperManifest): void {
-    const cachePath = getManifestCachePath();
-    const cacheDir = path.dirname(cachePath);
-
-    try {
-        if (!fs.existsSync(cacheDir)) {
-            fs.mkdirSync(cacheDir, { recursive: true });
-        }
-        fs.writeFileSync(cachePath, JSON.stringify(manifest, null, 2));
-    } catch (error) {
-        console.error('[manifest] Failed to cache manifest:', error);
-    }
-}
-
-// ============================================================================
-// Manifest Fetching
-// ============================================================================
-
-/**
- * Fetch JSON from HTTPS URL
- */
-function fetchJson<T>(url: string): Promise<T> {
+function fetchJson<T>(url: string, redirectCount = 0): Promise<T> {
     return new Promise((resolve, reject) => {
-        https.get(url, (res) => {
-            if (res.statusCode !== 200) {
-                reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+        const parsed = new URL(url);
+        const getter = parsed.protocol === 'http:' ? http.get : https.get;
+
+        const request = getter(url, (res) => {
+            if (res.statusCode && [301, 302, 307, 308].includes(res.statusCode)) {
+                const location = res.headers.location;
+                if (location && redirectCount < MAX_REDIRECTS) {
+                    res.resume();
+                    const nextUrl = new URL(location, url).toString();
+                    fetchJson<T>(nextUrl, redirectCount + 1).then(resolve).catch(reject);
+                    return;
+                }
+            }
+
+            if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+                res.resume();
+                reject(new Error(`HTTP ${res.statusCode ?? '??'}: ${res.statusMessage ?? 'Unknown error'}`));
                 return;
             }
 
             let data = '';
-            res.on('data', (chunk) => { data += chunk; });
+            res.setEncoding('utf-8');
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
             res.on('end', () => {
                 try {
                     resolve(JSON.parse(data) as T);
-                } catch (error) {
+                } catch {
                     reject(new Error('Invalid JSON response'));
                 }
             });
             res.on('error', reject);
-        }).on('error', reject);
+        });
+
+        request.on('error', reject);
     });
 }
 
-/**
- * Fetch the Whisper manifest from remote URL
- * Falls back to cached manifest or placeholder if fetch fails
- */
-export async function fetchWhisperManifest(): Promise<WhisperManifest> {
-    const manifestUrl = getWhisperManifestUrl() || DEFAULT_MANIFEST_URL;
-
-    console.log('[manifest] Fetching manifest from:', manifestUrl);
-
-    try {
-        const manifest = await fetchJson<WhisperManifest>(manifestUrl);
-
-        // Validate manifest structure
-        if (!manifest.version || !manifest.platforms || !manifest.models) {
-            throw new Error('Invalid manifest structure');
-        }
-
-        // Cache the manifest
-        saveCachedManifest(manifest);
-
-        console.log('[manifest] Fetched manifest version:', manifest.version);
-        return manifest;
-    } catch (error) {
-        console.warn('[manifest] Failed to fetch remote manifest:', error);
-
-        // Try cached manifest
-        const cached = loadCachedManifest();
-        if (cached) {
-            console.log('[manifest] Using cached manifest version:', cached.version);
-            return cached;
-        }
-
-        // Fall back to placeholder for development
-        console.log('[manifest] Using placeholder manifest');
-        return PLACEHOLDER_MANIFEST;
+function validateManifest(manifest: WhisperManifest): void {
+    if (!manifest.addonId) {
+        throw new Error('Manifest missing addonId.');
+    }
+    if (!manifest.packages && !manifest.models) {
+        throw new Error('Manifest is missing packages and models.');
     }
 }
 
-/**
- * Get platform key for current system
- */
-export function getPlatformKey(): keyof WhisperManifest['platforms'] | null {
-    const platform = process.platform;
-    const arch = process.arch;
+function getPlatformAliases(platform: string): string[] {
+    switch (platform) {
+        case 'win32':
+            return ['windows', 'win32'];
+        case 'darwin':
+            return ['darwin', 'macos', 'osx'];
+        default:
+            return [platform];
+    }
+}
 
-    const key = `${platform}-${arch}` as keyof WhisperManifest['platforms'];
+export function getPlatformKey(): string {
+    return `${process.platform}-${process.arch}`;
+}
 
-    // Only return if it's a known platform
-    if (['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'].includes(key)) {
-        return key;
+export function isPlatformSupported(platformKey: string = getPlatformKey()): boolean {
+    return SUPPORTED_PLATFORMS.includes(platformKey as SupportedPlatform);
+}
+
+export function listWhisperModels(manifest: WhisperManifest | null): string[] {
+    if (!manifest?.models) {
+        return [...DEFAULT_WHISPER_MODELS];
+    }
+    const names = Object.keys(manifest.models);
+    return names.length > 0 ? names : [...DEFAULT_WHISPER_MODELS];
+}
+
+export function resolveWhisperModel(
+    manifest: WhisperManifest,
+    modelName: string,
+): { name: string; url: string; sha256?: string; bytes?: number } | null {
+    if (!manifest.models) return null;
+    const entry = manifest.models[modelName];
+    if (!entry) return null;
+    if (typeof entry === 'string') {
+        return { name: modelName, url: entry };
+    }
+    return {
+        name: modelName,
+        url: entry.url,
+        sha256: entry.sha256,
+        bytes: entry.bytes,
+    };
+}
+
+export function resolveWhisperPackage(
+    manifest: WhisperManifest,
+    platformKey: string,
+    variant: 'default' | 'blas' = 'default',
+): ResolvedWhisperPackage | null {
+    const packages = manifest.packages;
+    if (!packages) return null;
+
+    const [platform, arch] = platformKey.split('-');
+    if (!platform || !arch) return null;
+
+    const osKeys = getPlatformAliases(platform);
+    for (const osKey of osKeys) {
+        const byArch = packages[osKey];
+        if (!byArch) continue;
+        const archSet = byArch[arch];
+        if (!archSet) continue;
+
+        const selected = variant === 'blas' ? archSet.blas ?? archSet.default : archSet.default;
+        if (!selected?.url) {
+            continue;
+        }
+
+        return {
+            platformKey,
+            osKey,
+            arch,
+            variant: selected === archSet.blas ? 'blas' : 'default',
+            package: selected,
+            binCandidates: archSet.binCandidates ?? [],
+        };
     }
 
     return null;
 }
 
-/**
- * Check if current platform is supported by manifest
- */
-export function isPlatformSupported(manifest: WhisperManifest): boolean {
-    const key = getPlatformKey();
-    if (!key) return false;
+export async function resolveWhisperManifest(): Promise<ResolvedWhisperManifest> {
+    const overrideUrl = getWhisperManifestUrl();
 
-    return !!manifest.platforms[key];
-}
+    if (overrideUrl) {
+        const manifest = await fetchJson<WhisperManifest>(overrideUrl);
+        validateManifest(manifest);
+        return { manifest, manifestUrl: overrideUrl };
+    }
 
-/**
- * Get asset info for current platform
- */
-export function getPlatformAsset(manifest: WhisperManifest): PlatformAsset | null {
-    const key = getPlatformKey();
-    if (!key) return null;
+    const index = await fetchJson<WhisperRegistryIndex>(REGISTRY_INDEX_URL);
+    const entry = index.manifests?.find((item) => item.addonId === WHISPER_ADDON_ID);
+    if (!entry) {
+        throw new Error(`Registry index missing ${WHISPER_ADDON_ID} manifest.`);
+    }
 
-    return manifest.platforms[key] || null;
+    const manifestUrl = new URL(entry.path, REGISTRY_BASE_URL).toString();
+    const manifest = await fetchJson<WhisperManifest>(manifestUrl);
+    validateManifest(manifest);
+    return { manifest, manifestUrl };
 }

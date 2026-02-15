@@ -1,0 +1,34 @@
+{
+  "version": "0.1.0",
+  "releaseDate": "2026-01-20",
+  "defaultModel": "base",
+  "platforms": {
+    "win32-x64": {
+      "bundledPath": "win32-x64/whisper.zip",
+      "url": "https://example.com/worldseed/whisper-win32-x64.zip",
+      "sha256": "REPLACE_WITH_SHA256",
+      "bytes": 0,
+      "binaryPath": "whisper.exe",
+      "model": "base",
+      "minOS": "10.0"
+    },
+    "darwin-arm64": {
+      "bundledPath": "darwin-arm64/whisper.zip",
+      "url": "https://example.com/worldseed/whisper-darwin-arm64.zip",
+      "sha256": "REPLACE_WITH_SHA256",
+      "bytes": 0,
+      "binaryPath": "whisper",
+      "model": "base",
+      "minOS": "12.0"
+    },
+    "darwin-x64": {
+      "bundledPath": "darwin-x64/whisper.zip",
+      "url": "https://example.com/worldseed/whisper-darwin-x64.zip",
+      "sha256": "REPLACE_WITH_SHA256",
+      "bytes": 0,
+      "binaryPath": "whisper",
+      "model": "base",
+      "minOS": "12.0"
+    }
+  }
+}

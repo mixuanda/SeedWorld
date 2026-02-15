@@ -24,6 +24,12 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
     const [sourceUrl, setSourceUrl] = useState(() => window.api.attachment.getUrl(audioPath));
     const [usingFallback, setUsingFallback] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [errorDetails, setErrorDetails] = useState<{
+        code: number | null;
+        src: string;
+        readyState: number;
+        networkState: number;
+    } | null>(null);
 
     useEffect(() => {
         audioPathRef.current = audioPath;
@@ -34,6 +40,7 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
         setSourceUrl(window.api.attachment.getUrl(audioPath));
         setUsingFallback(false);
         setError(null);
+        setErrorDetails(null);
         setCurrentTime(0);
         setDuration(0);
     }, [audioPath]);
@@ -123,12 +130,19 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
             const decodedError = decodeMediaError(audio.error);
             logEvent('error', decodedError);
             setError(decodedError);
+            setErrorDetails({
+                code: audio.error?.code ?? null,
+                src: audio.currentSrc,
+                readyState: audio.readyState,
+                networkState: audio.networkState,
+            });
             setIsPlaying(false);
             await attemptFallback('error', true);
         };
         const handleCanPlay = () => {
             logEvent('canplay');
             setError(null);
+            setErrorDetails(null);
         };
         const handleCanPlayThrough = () => {
             logEvent('canplaythrough');
@@ -186,6 +200,12 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
             audio.play().catch(err => {
                 console.error('[AudioPlayer] Play failed:', err);
                 setError('Playback request failed.');
+                setErrorDetails({
+                    code: audio.error?.code ?? null,
+                    src: audio.currentSrc,
+                    readyState: audio.readyState,
+                    networkState: audio.networkState,
+                });
             });
         }
     };
@@ -261,6 +281,16 @@ export function AudioPlayer({ audioPath }: AudioPlayerProps): React.ReactElement
                 <div className="audio-error-panel">
                     <div className="audio-error-title">Audio playback issue</div>
                     <div className="audio-error-message">{error}</div>
+                    {errorDetails && (
+                        <div className="audio-error-message">
+                            Code: {errorDetails.code ?? 'unknown'} · Ready: {errorDetails.readyState} · Network: {errorDetails.networkState}
+                        </div>
+                    )}
+                    {errorDetails?.src && (
+                        <div className="audio-error-message">
+                            Source: {errorDetails.src}
+                        </div>
+                    )}
                     {usingFallback && (
                         <div className="audio-error-message">Retrying with local stream.</div>
                     )}

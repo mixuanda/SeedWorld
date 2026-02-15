@@ -95,3 +95,13 @@ await window.api.ping()
 await window.api.vault.getPath()
 // Expected: "C:\\Users\\...\\OneDrive\\WorldSeed" (or null if not set)
 ```
+
+---
+
+## Verify Whisper Add-on
+
+1. Open Settings > Whisper Add-on and confirm "Detected: win32 / x64" plus "Not installed".
+2. Choose the `base` model and click "Download & Install".
+3. Record a ~5s voice note.
+4. Use Transcribe (if available) to transcribe the note.
+5. Confirm the transcription succeeds and audio playback/seek works for the saved `.webm`.

@@ -1,6 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
-import path from 'node:path';
+import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron';
 import * as fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import started from 'electron-squirrel-startup';
 import { getVaultPath, setVaultPath, getAIConfig, setAIConfig, getAIConfigForRenderer } from './main/store';
 import {
@@ -25,6 +27,13 @@ import {
   type ProviderConfig,
   type LocalProviderConfig,
 } from './main/ai-provider';
+import {
+  ensureWhisperInstalled,
+  getWhisperStatus,
+  installWhisper,
+  uninstallWhisper,
+  type WhisperProgress,
+} from './main/addons/whisper';
 
 // Custom protocol for serving vault files securely
 const VAULT_PROTOCOL = 'seedworld';
@@ -208,6 +217,34 @@ ipcMain.handle('ai:testConnection', async (_event, config: ProviderConfig) => {
   return result;
 });
 
+// --- Attachment Operations ---
+
+ipcMain.handle('attachment:getStreamUrl', async (_event, relativePath: string) => {
+  return getAttachmentStreamUrl(relativePath);
+});
+
+// --- Whisper Add-on Operations ---
+
+ipcMain.handle('whisper:getStatus', async () => {
+  return getWhisperStatus();
+});
+
+ipcMain.handle('whisper:install', async (_event, modelName?: string) => {
+  return installWhisper({ model: modelName }, (progress) => {
+    broadcastWhisperProgress(progress);
+  });
+});
+
+ipcMain.handle('whisper:uninstall', async () => {
+  return uninstallWhisper();
+});
+
+ipcMain.handle('whisper:ensureInstalled', async (_event, modelName?: string) => {
+  return ensureWhisperInstalled(modelName, (progress) => {
+    broadcastWhisperProgress(progress);
+  });
+});
+
 // --- Voice Note Operations ---
 
 // Save a voice note (audio + note)
@@ -301,7 +338,7 @@ function isPathSafe(relativePath: string): boolean {
 function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const mimeTypes: Record<string, string> = {
-    '.webm': 'audio/webm',
+    '.webm': 'audio/webm; codecs=opus',
     '.ogg': 'audio/ogg',
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
@@ -338,6 +375,231 @@ function parseRangeHeader(rangeHeader: string | null, fileSize: number): [number
   return [start, end];
 }
 
+// ============================================================================
+// Local Attachment Streaming Server (fallback)
+// ============================================================================
+
+const ATTACHMENT_SERVER_HOST = '127.0.0.1';
+const ATTACHMENT_SERVER_TOKEN = randomBytes(16).toString('hex');
+let attachmentServer: http.Server | null = null;
+let attachmentServerPort: number | null = null;
+let attachmentServerStarting: Promise<number> | null = null;
+
+function buildAttachmentHeaders(mimeType: string, contentLength: number, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    'Content-Type': mimeType,
+    'Content-Length': contentLength.toString(),
+    'Accept-Ranges': 'bytes',
+    ...extra,
+  };
+}
+
+function logAttachmentResponse(status: number, headers: Record<string, string>): void {
+  const contentHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.startsWith('content-') || lowerKey === 'accept-ranges') {
+      contentHeaders[key] = value;
+    }
+  }
+  console.log('[attachment-server] Response', { status, headers: contentHeaders });
+}
+
+function logProtocolResponse(status: number, headers: Record<string, string>): void {
+  const contentHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.startsWith('content-') || lowerKey === 'accept-ranges') {
+      contentHeaders[key] = value;
+    }
+  }
+  console.log('[protocol] Response', { status, headers: contentHeaders });
+}
+
+function handleAttachmentRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const method = req.method || 'GET';
+  if (method !== 'GET' && method !== 'HEAD') {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(405, headers);
+    res.end('Method Not Allowed');
+    logAttachmentResponse(405, headers);
+    return;
+  }
+
+  const requestUrl = new URL(req.url || '/', `http://${ATTACHMENT_SERVER_HOST}`);
+  const expectedPath = `/vault/${ATTACHMENT_SERVER_TOKEN}`;
+  if (!requestUrl.pathname.startsWith(expectedPath)) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(403, headers);
+    res.end('Forbidden');
+    logAttachmentResponse(403, headers);
+    return;
+  }
+
+  const encodedPath = requestUrl.searchParams.get('path');
+  if (!encodedPath) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(400, headers);
+    res.end('Missing path');
+    logAttachmentResponse(400, headers);
+    return;
+  }
+
+  const relativePath = decodeURIComponent(encodedPath);
+  if (!isPathSafe(relativePath)) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(403, headers);
+    res.end('Forbidden');
+    logAttachmentResponse(403, headers);
+    return;
+  }
+
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(404, headers);
+    res.end('Vault not configured');
+    logAttachmentResponse(404, headers);
+    return;
+  }
+
+  const fullPath = path.join(vaultPath, relativePath);
+  const resolvedPath = path.resolve(fullPath);
+  const resolvedVault = path.resolve(vaultPath);
+  if (!resolvedPath.startsWith(resolvedVault)) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(403, headers);
+    res.end('Forbidden');
+    logAttachmentResponse(403, headers);
+    return;
+  }
+
+  if (!fs.existsSync(fullPath)) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(404, headers);
+    res.end('Not found');
+    logAttachmentResponse(404, headers);
+    return;
+  }
+
+  const stat = fs.statSync(fullPath);
+  if (!stat.isFile()) {
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    res.writeHead(404, headers);
+    res.end('Not found');
+    logAttachmentResponse(404, headers);
+    return;
+  }
+
+  const fileSize = stat.size;
+  const mimeType = getMimeType(fullPath);
+  const rangeHeaderRaw = req.headers.range;
+  const rangeHeader = Array.isArray(rangeHeaderRaw) ? rangeHeaderRaw[0] : rangeHeaderRaw || null;
+  const range = parseRangeHeader(rangeHeader, fileSize);
+
+  console.log('[attachment-server] Request', {
+    url: req.url,
+    fullPath,
+    mimeType,
+    hasRange: !!rangeHeader,
+  });
+
+  if (rangeHeader && !range) {
+    const headers = buildAttachmentHeaders(mimeType, fileSize, {
+      'Content-Range': `bytes */${fileSize}`,
+    });
+    res.writeHead(416, headers);
+    res.end();
+    logAttachmentResponse(416, headers);
+    return;
+  }
+
+  if (range) {
+    const [start, end] = range;
+    const chunkSize = end - start + 1;
+    const headers = buildAttachmentHeaders(mimeType, chunkSize, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+    });
+    res.writeHead(206, headers);
+    logAttachmentResponse(206, headers);
+    if (method === 'HEAD') {
+      res.end();
+      return;
+    }
+    const stream = fs.createReadStream(fullPath, { start, end });
+    stream.on('error', (error) => {
+      console.error('[attachment-server] Stream error:', error);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      }
+      res.end();
+    });
+    stream.pipe(res);
+    return;
+  }
+
+  const headers = buildAttachmentHeaders(mimeType, fileSize);
+  res.writeHead(200, headers);
+  logAttachmentResponse(200, headers);
+  if (method === 'HEAD') {
+    res.end();
+    return;
+  }
+  const stream = fs.createReadStream(fullPath);
+  stream.on('error', (error) => {
+    console.error('[attachment-server] Stream error:', error);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    }
+    res.end();
+  });
+  stream.pipe(res);
+}
+
+async function ensureAttachmentServer(): Promise<number> {
+  if (attachmentServerPort) return attachmentServerPort;
+  if (attachmentServerStarting) return attachmentServerStarting;
+
+  attachmentServerStarting = new Promise((resolve, reject) => {
+    attachmentServer = http.createServer(handleAttachmentRequest);
+    attachmentServer.on('error', (error) => {
+      console.error('[attachment-server] Failed to start:', error);
+      attachmentServerStarting = null;
+      reject(error);
+    });
+
+    attachmentServer.listen(0, ATTACHMENT_SERVER_HOST, () => {
+      const address = attachmentServer?.address();
+      if (address && typeof address === 'object') {
+        attachmentServerPort = address.port;
+        attachmentServerStarting = null;
+        console.log(`[attachment-server] Listening on http://${ATTACHMENT_SERVER_HOST}:${attachmentServerPort}`);
+        resolve(attachmentServerPort);
+        return;
+      }
+      attachmentServerStarting = null;
+      reject(new Error('Failed to bind attachment server'));
+    });
+  });
+
+  return attachmentServerStarting;
+}
+
+async function getAttachmentStreamUrl(relativePath: string): Promise<string> {
+  const port = await ensureAttachmentServer();
+  const cleanPath = relativePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+  if (!isPathSafe(cleanPath)) {
+    throw new Error('Invalid attachment path');
+  }
+  return `http://${ATTACHMENT_SERVER_HOST}:${port}/vault/${ATTACHMENT_SERVER_TOKEN}?path=${encodeURIComponent(cleanPath)}`;
+}
+
+function broadcastWhisperProgress(progress: WhisperProgress): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('whisper:progress', progress);
+  }
+}
+
 /**
  * Register the seedworld:// protocol
  * Supports Range requests for audio/video seeking
@@ -348,53 +610,85 @@ function registerVaultProtocol(): void {
     try {
       // Parse the URL: seedworld://vault/<relativePath>
       const url = new URL(request.url);
+      const rangeHeader = request.headers.get('Range');
+      const hasRange = !!rangeHeader;
 
       // Expect: seedworld://vault/attachments/audio/a_xxx.webm
       if (url.hostname !== 'vault') {
         console.error('[protocol] Invalid host:', url.hostname);
+        console.log('[protocol] Request', {
+          url: request.url,
+          fullPath: null,
+          mimeType: null,
+          hasRange,
+        });
+        logProtocolResponse(400, {});
         return new Response('Invalid host', { status: 400 });
       }
 
       // Get relative path from URL
       const relativePath = decodeURIComponent(url.pathname.slice(1)); // Remove leading /
 
+      // Get vault path
+      const vaultPath = getVaultPath();
+      const fullPath = vaultPath ? path.join(vaultPath, relativePath) : null;
+      const mimeType = fullPath ? getMimeType(fullPath) : 'application/octet-stream';
+
+      console.log('[protocol] Request', {
+        url: request.url,
+        relativePath,
+        fullPath,
+        mimeType,
+        hasRange,
+      });
+
       // Security: validate path
       if (!isPathSafe(relativePath)) {
         console.error('[protocol] Path traversal attempt blocked:', relativePath);
+        logProtocolResponse(403, {});
         return new Response('Forbidden', { status: 403 });
       }
 
-      // Get vault path
-      const vaultPath = getVaultPath();
       if (!vaultPath) {
         console.error('[protocol] No vault configured');
+        logProtocolResponse(404, {});
         return new Response('Vault not configured', { status: 404 });
       }
 
       // Build full path
-      const fullPath = path.join(vaultPath, relativePath);
+      const fullPathResolved = path.join(vaultPath, relativePath);
 
       // Security: verify path is still within vault (double-check after join)
-      const resolvedPath = path.resolve(fullPath);
+      const resolvedPath = path.resolve(fullPathResolved);
       const resolvedVault = path.resolve(vaultPath);
       if (!resolvedPath.startsWith(resolvedVault)) {
         console.error('[protocol] Path escape attempt blocked:', resolvedPath);
+        logProtocolResponse(403, {});
         return new Response('Forbidden', { status: 403 });
       }
 
       // Check file exists and get stats
-      if (!fs.existsSync(fullPath)) {
+      if (!fs.existsSync(fullPathResolved)) {
         console.error('[protocol] File not found:', relativePath);
+        logProtocolResponse(404, {});
         return new Response('Not found', { status: 404 });
       }
 
-      const stat = fs.statSync(fullPath);
+      const stat = fs.statSync(fullPathResolved);
       const fileSize = stat.size;
-      const mimeType = getMimeType(fullPath);
 
       // Check for Range header (for seeking support)
-      const rangeHeader = request.headers.get('Range');
       const range = parseRangeHeader(rangeHeader, fileSize);
+
+      if (rangeHeader && !range) {
+        const headers = {
+          'Content-Type': mimeType,
+          'Content-Range': `bytes */${fileSize}`,
+          'Accept-Ranges': 'bytes',
+        };
+        logProtocolResponse(416, headers);
+        return new Response('Range Not Satisfiable', { status: 416, headers });
+      }
 
       if (range) {
         // Partial content response (206)
@@ -402,7 +696,7 @@ function registerVaultProtocol(): void {
         const chunkSize = end - start + 1;
 
         // Create readable stream for the range
-        const stream = fs.createReadStream(fullPath, { start, end });
+        const stream = fs.createReadStream(fullPathResolved, { start, end });
 
         // Convert Node stream to Web ReadableStream
         const webStream = new ReadableStream({
@@ -422,19 +716,21 @@ function registerVaultProtocol(): void {
           },
         });
 
+        const headers = {
+          'Content-Type': mimeType,
+          'Content-Length': chunkSize.toString(),
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+        };
+        logProtocolResponse(206, headers);
         return new Response(webStream, {
           status: 206,
-          headers: {
-            'Content-Type': mimeType,
-            'Content-Length': chunkSize.toString(),
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Accept-Ranges': 'bytes',
-          },
+          headers,
         });
       }
 
       // Full file response (200)
-      const stream = fs.createReadStream(fullPath);
+      const stream = fs.createReadStream(fullPathResolved);
 
       // Convert Node stream to Web ReadableStream
       const webStream = new ReadableStream({
@@ -454,16 +750,19 @@ function registerVaultProtocol(): void {
         },
       });
 
+      const headers = {
+        'Content-Type': mimeType,
+        'Content-Length': fileSize.toString(),
+        'Accept-Ranges': 'bytes',
+      };
+      logProtocolResponse(200, headers);
       return new Response(webStream, {
         status: 200,
-        headers: {
-          'Content-Type': mimeType,
-          'Content-Length': fileSize.toString(),
-          'Accept-Ranges': 'bytes',
-        },
+        headers,
       });
     } catch (error) {
       console.error('[protocol] Error serving file:', error);
+      logProtocolResponse(500, {});
       return new Response('Internal error', { status: 500 });
     }
   });
@@ -478,6 +777,14 @@ app.on('ready', () => {
   // Register custom protocol BEFORE creating window
   registerVaultProtocol();
   createWindow();
+});
+
+app.on('before-quit', () => {
+  if (attachmentServer) {
+    attachmentServer.close();
+    attachmentServer = null;
+    attachmentServerPort = null;
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

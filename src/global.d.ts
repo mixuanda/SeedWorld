@@ -94,6 +94,44 @@ export interface VoiceAPI {
 
 export interface AttachmentAPI {
     getUrl: (relativePath: string) => string;
+    getStreamUrl: (relativePath: string) => Promise<string>;
+}
+
+// ============================================================================
+// Whisper Add-on Types
+// ============================================================================
+
+export interface WhisperStatus {
+    platformKey: string;
+    supported: boolean;
+    installed: boolean;
+    state: 'unsupported' | 'not_installed' | 'installed' | 'broken';
+    version: string | null;
+    model: string | null;
+    availableModels: string[];
+    sizeBytes: number | null;
+    message: string | null;
+    health?: {
+        ok: boolean;
+        exitCode: number | null;
+        stderr: string | null;
+    };
+}
+
+export interface WhisperProgress {
+    stage: 'downloading' | 'verifying' | 'extracting' | 'installing';
+    percent: number | null;
+    transferredBytes: number;
+    totalBytes: number | null;
+    message: string;
+}
+
+export interface WhisperAPI {
+    getStatus: () => Promise<WhisperStatus>;
+    install: (model?: string) => Promise<WhisperStatus>;
+    uninstall: () => Promise<WhisperStatus>;
+    ensureInstalled: (model?: string) => Promise<WhisperStatus>;
+    onProgress: (callback: (progress: WhisperProgress) => void) => () => void;
 }
 
 // ============================================================================
@@ -108,6 +146,7 @@ declare global {
             ai: AIAPI;
             voice: VoiceAPI;
             attachment: AttachmentAPI;
+            whisper: WhisperAPI;
         };
     }
 }

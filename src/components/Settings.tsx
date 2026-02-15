@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import type { ProviderConfig, LocalProviderConfig, TestConnectionResult } from '../global';
+import type {
+    ProviderConfig,
+    LocalProviderConfig,
+    TestConnectionResult,
+    WhisperProgress,
+    WhisperStatus,
+} from '../global';
 
 interface SettingsProps {
     onClose: () => void;
@@ -20,6 +26,12 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
     const [isSaving, setIsSaving] = useState(false);
     const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [whisperStatus, setWhisperStatus] = useState<WhisperStatus | null>(null);
+    const [whisperLoading, setWhisperLoading] = useState(true);
+    const [whisperBusy, setWhisperBusy] = useState<'install' | 'uninstall' | null>(null);
+    const [whisperError, setWhisperError] = useState<string | null>(null);
+    const [whisperProgress, setWhisperProgress] = useState<WhisperProgress | null>(null);
+    const [whisperModelChoice, setWhisperModelChoice] = useState('base');
 
     // Load existing config on mount
     useEffect(() => {
@@ -38,6 +50,34 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
             }
         };
         loadConfig();
+    }, []);
+
+    useEffect(() => {
+        const loadWhisperStatus = async () => {
+            setWhisperLoading(true);
+            setWhisperError(null);
+            try {
+                const status = await window.api.whisper.getStatus();
+                setWhisperStatus(status);
+                if (status.availableModels?.length) {
+                    const defaultModel = status.model || (status.availableModels.includes('base') ? 'base' : status.availableModels[0]);
+                    setWhisperModelChoice(defaultModel);
+                } else if (status.model) {
+                    setWhisperModelChoice(status.model);
+                }
+            } catch (err) {
+                setWhisperError(err instanceof Error ? err.message : 'Failed to load Whisper status');
+            } finally {
+                setWhisperLoading(false);
+            }
+        };
+        loadWhisperStatus();
+    }, []);
+
+    useEffect(() => {
+        return window.api.whisper.onProgress((progress) => {
+            setWhisperProgress(progress);
+        });
     }, []);
 
     const buildConfig = (): ProviderConfig => {
@@ -81,6 +121,89 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleWhisperInstall = async () => {
+        setWhisperBusy('install');
+        setWhisperError(null);
+        setWhisperProgress(null);
+
+        try {
+            const status = await window.api.whisper.install(whisperModelChoice);
+            setWhisperStatus(status);
+            if (status.model) {
+                setWhisperModelChoice(status.model);
+            }
+        } catch (err) {
+            setWhisperError(err instanceof Error ? err.message : 'Install failed');
+        } finally {
+            setWhisperBusy(null);
+            setWhisperProgress(null);
+        }
+    };
+
+    const handleWhisperUninstall = async () => {
+        setWhisperBusy('uninstall');
+        setWhisperError(null);
+        setWhisperProgress(null);
+
+        try {
+            const status = await window.api.whisper.uninstall();
+            setWhisperStatus(status);
+            if (status.availableModels?.length) {
+                const defaultModel = status.model || (status.availableModels.includes('base') ? 'base' : status.availableModels[0]);
+                setWhisperModelChoice(defaultModel);
+            }
+        } catch (err) {
+            setWhisperError(err instanceof Error ? err.message : 'Uninstall failed');
+        } finally {
+            setWhisperBusy(null);
+            setWhisperProgress(null);
+        }
+    };
+
+    const formatBytes = (bytes: number | null): string => {
+        if (!bytes || bytes <= 0) return '-';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = bytes;
+        let unitIndex = 0;
+
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex += 1;
+        }
+
+        const precision = unitIndex === 0 ? 0 : value >= 10 ? 0 : 1;
+        return `${value.toFixed(precision)} ${units[unitIndex]}`;
+    };
+
+    const whisperState = whisperStatus?.state || 'not_installed';
+    const whisperIsUnsupported = whisperState === 'unsupported';
+    const whisperIsInstalled = whisperState === 'installed';
+    const whisperIsBroken = whisperState === 'broken';
+    const whisperIsNotInstalled = whisperState === 'not_installed';
+    const whisperVersion = whisperStatus?.version || '-';
+    const whisperModel = whisperStatus?.model || '-';
+    const whisperSize = formatBytes(whisperStatus?.sizeBytes ?? null);
+    const whisperMessage = whisperStatus?.message || null;
+    const whisperAvailableModels = whisperStatus?.availableModels?.length
+        ? whisperStatus.availableModels
+        : ['tiny', 'base', 'small'];
+    const whisperProgressLabel = whisperProgress
+        ? `${whisperProgress.message}${whisperProgress.percent !== null ? ` (${whisperProgress.percent}%)` : ''}`
+        : null;
+    const whisperInProgress = whisperBusy === 'install' || whisperProgress !== null;
+    const whisperInstallLabel = whisperIsBroken ? 'Reinstall' : 'Download & Install';
+    const whisperCanInstall = whisperIsNotInstalled || whisperIsBroken;
+    const whisperCanUninstall = whisperIsInstalled || whisperIsBroken;
+    const whisperModelDisabled = whisperLoading || whisperInProgress || whisperIsUnsupported || (whisperIsInstalled && !whisperIsBroken);
+    const formatPlatformKey = (platformKey?: string | null): string => {
+        if (!platformKey) return '-';
+        const parts = platformKey.split('-');
+        const platform = parts.shift();
+        const arch = parts.join('-');
+        if (!platform) return platformKey;
+        return arch ? `${platform} / ${arch}` : platform;
     };
 
     return (
@@ -185,6 +308,105 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
 
                         {error && (
                             <div className="settings-error">{error}</div>
+                        )}
+                    </div>
+
+                    {/* Whisper Add-on */}
+                    <div className="settings-section">
+                        <label className="settings-label">Whisper Add-on</label>
+                        <span className="settings-hint">Optional local speech-to-text engine</span>
+
+                        <div className="whisper-status">
+                            <div className="whisper-status-label">Status</div>
+                            <div className="whisper-status-value">
+                                {whisperLoading
+                                    ? 'Loading...'
+                                    : whisperIsUnsupported
+                                        ? 'Unsupported'
+                                        : whisperIsBroken
+                                            ? 'Broken'
+                                            : whisperIsInstalled
+                                                ? 'Installed'
+                                                : 'Not installed'}
+                            </div>
+
+                            <div className="whisper-status-label">Detected</div>
+                            <div className="whisper-status-value">
+                                {whisperLoading ? 'Loading...' : formatPlatformKey(whisperStatus?.platformKey)}
+                            </div>
+
+                            <div className="whisper-status-label">Version</div>
+                            <div className="whisper-status-value">
+                                {whisperLoading ? 'Loading...' : whisperVersion}
+                            </div>
+
+                            <div className="whisper-status-label">Model</div>
+                            <div className="whisper-status-value">
+                                {whisperLoading ? 'Loading...' : whisperModel}
+                            </div>
+
+                            <div className="whisper-status-label">Size</div>
+                            <div className="whisper-status-value">
+                                {whisperLoading ? 'Loading...' : whisperSize}
+                            </div>
+                        </div>
+
+                        <div className="whisper-model-select">
+                            <label className="settings-label" htmlFor="whisper-model">
+                                Model to install
+                            </label>
+                            <select
+                                id="whisper-model"
+                                className="settings-input whisper-select"
+                                value={whisperModelChoice}
+                                onChange={(event) => setWhisperModelChoice(event.target.value)}
+                                disabled={whisperModelDisabled}
+                            >
+                                {whisperAvailableModels.map((modelName) => (
+                                    <option key={modelName} value={modelName}>
+                                        {modelName}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {whisperMessage && (
+                            <div className="whisper-message">{whisperMessage}</div>
+                        )}
+
+                        {whisperProgressLabel && (
+                            <div className="whisper-progress">
+                                <div className="whisper-progress-text">{whisperProgressLabel}</div>
+                                {whisperProgress?.percent !== null && (
+                                    <div className="whisper-progress-bar">
+                                        <div
+                                            className="whisper-progress-fill"
+                                            style={{ width: `${whisperProgress.percent}%` }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="whisper-actions">
+                            <button
+                                className="settings-save"
+                                onClick={handleWhisperInstall}
+                                disabled={whisperLoading || whisperInProgress || whisperIsUnsupported || !whisperCanInstall}
+                            >
+                                {whisperInProgress ? 'Installing...' : whisperInstallLabel}
+                            </button>
+                            <button
+                                className="settings-cancel"
+                                onClick={handleWhisperUninstall}
+                                disabled={whisperLoading || whisperBusy !== null || !whisperCanUninstall}
+                            >
+                                {whisperBusy === 'uninstall' ? 'Uninstalling...' : 'Uninstall'}
+                            </button>
+                        </div>
+
+                        {whisperError && (
+                            <div className="settings-error">{whisperError}</div>
                         )}
                     </div>
                 </div>
