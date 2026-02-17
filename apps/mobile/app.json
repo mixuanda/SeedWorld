@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "SeedWorld Mobile",
+    "slug": "seedworld-mobile",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "assetBundlePatterns": ["**/*"]
+  }
+}

@@ -90,3 +90,9 @@ typings/
 
 # Electron-Forge
 out/
+
+# Workspace build/runtime outputs
+apps/web/dist/
+packages/core/dist/
+services/sync-server/dist/
+services/sync-server/data/

@@ -21,6 +21,7 @@
   },
   "include": [
     "src/**/*",
+    "forge.env.d.ts",
     "forge.config.ts",
     "vite.*.config.ts"
   ]

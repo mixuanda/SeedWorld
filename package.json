@@ -1,58 +1,21 @@
 {
-  "name": "world-seed",
-  "productName": "World-Seed",
-  "version": "0.1.0",
-  "description": "Ultra-fast atomic idea capture with AI-assisted classification, linking, and conflict detection",
-  "main": ".vite/build/main.js",
+  "name": "seedworld-monorepo",
   "private": true,
-  "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx .",
-    "test": "echo \"No tests yet\" && exit 0"
-  },
-  "keywords": [
-    "electron",
-    "worldbuilding",
-    "notes",
-    "ai"
+  "version": "0.2.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
   ],
-  "author": {
-    "name": "mixuanda",
-    "email": "mixuanda@outlook.com"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "@electron-forge/cli": "^7.11.1",
-    "@electron-forge/maker-deb": "^7.11.1",
-    "@electron-forge/maker-rpm": "^7.11.1",
-    "@electron-forge/maker-squirrel": "^7.11.1",
-    "@electron-forge/maker-zip": "^7.11.1",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
-    "@electron-forge/plugin-fuses": "^7.11.1",
-    "@electron-forge/plugin-vite": "^7.11.1",
-    "@electron/fuses": "^1.8.0",
-    "@types/electron-squirrel-startup": "^1.0.2",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^5.62.0",
-    "@typescript-eslint/parser": "^5.62.0",
-    "@vitejs/plugin-react": "^4.2.0",
-    "electron": "40.0.0",
-    "eslint": "^8.57.1",
-    "eslint-plugin-import": "^2.32.0",
-    "typescript": "~4.5.4",
-    "vite": "^5.4.21"
-  },
-  "dependencies": {
-    "electron-squirrel-startup": "^1.0.1",
-    "extract-zip": "^2.0.1",
-    "gray-matter": "^4.0.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "uuid": "^13.0.0"
+  "scripts": {
+    "dev:desktop": "npm run start --workspace @seedworld/desktop",
+    "dev:web": "npm run dev --workspace @seedworld/web",
+    "dev:mobile": "npm run dev --workspace @seedworld/mobile",
+    "dev:server": "npm run dev --workspace @seedworld/sync-server",
+    "start": "npm run start --workspace @seedworld/desktop",
+    "make": "npm run make --workspace @seedworld/desktop",
+    "package": "npm run package --workspace @seedworld/desktop",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   }
 }

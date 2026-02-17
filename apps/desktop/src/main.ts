@@ -4,7 +4,17 @@ import http from 'node:http';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import started from 'electron-squirrel-startup';
-import { getVaultPath, setVaultPath, getAIConfig, setAIConfig, getAIConfigForRenderer } from './main/store';
+import {
+  getVaultPath,
+  setVaultPath,
+  getAIConfig,
+  setAIConfig,
+  getAIConfigForRenderer,
+  getSyncConfig,
+  setSyncConfig,
+  clearSyncConfig,
+  type SyncConfig,
+} from './main/store';
 import {
   ensureVaultStructure,
   isValidVault,
@@ -34,6 +44,9 @@ import {
   uninstallWhisper,
   type WhisperProgress,
 } from './main/addons/whisper';
+import { DesktopSyncService } from './main/sync/service';
+
+let syncService: DesktopSyncService | null = null;
 
 // Custom protocol for serving vault files securely
 const VAULT_PROTOCOL = 'seedworld';
@@ -56,6 +69,36 @@ protocol.registerSchemesAsPrivileged([
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+function generateDeviceId(): string {
+  return `dev_${randomBytes(8).toString('hex')}`;
+}
+
+async function getOrInitSyncService(): Promise<DesktopSyncService> {
+  const vaultPath = getVaultPath();
+  const syncConfig = getSyncConfig();
+
+  if (!vaultPath) {
+    throw new Error('No vault configured');
+  }
+
+  if (!syncConfig) {
+    throw new Error('Not signed in to sync');
+  }
+
+  if (!syncService) {
+    syncService = DesktopSyncService.create({
+      vaultPath,
+      serverUrl: syncConfig.serverUrl,
+      userId: syncConfig.userId,
+      workspaceId: syncConfig.workspaceId,
+      deviceId: syncConfig.deviceId,
+      token: syncConfig.token,
+    });
+  }
+
+  return syncService;
 }
 
 // ============================================================================
@@ -89,6 +132,7 @@ ipcMain.handle('vault:selectFolder', async () => {
     ensureVaultStructure(selectedPath);
     // Save to local store
     setVaultPath(selectedPath);
+    syncService = null;
     console.log(`[main] Vault path set to: ${selectedPath}`);
     return selectedPath;
   } catch (error) {
@@ -179,6 +223,185 @@ ipcMain.handle('vault:rebuildIndex', () => {
   }
 
   return rebuildIndex(vaultPath);
+});
+
+// --- Sync/Auth Operations ---
+
+ipcMain.handle('auth:getConfig', () => {
+  const config = getSyncConfig();
+  if (!config) {
+    return null;
+  }
+
+  return {
+    serverUrl: config.serverUrl,
+    userId: config.userId,
+    workspaceId: config.workspaceId,
+    deviceId: config.deviceId,
+    tokenExpiresAtMs: config.tokenExpiresAtMs,
+  };
+});
+
+ipcMain.handle('auth:devSignIn', async (_event, input: {
+  serverUrl: string;
+  userId: string;
+  workspaceId: string;
+  deviceId?: string;
+}) => {
+  const serverUrl = input.serverUrl.trim().replace(/\/+$/, '');
+  const userId = input.userId.trim();
+  const workspaceId = input.workspaceId.trim();
+
+  if (!serverUrl || !userId || !workspaceId) {
+    throw new Error('serverUrl, userId, and workspaceId are required');
+  }
+
+  const response = await fetch(`${serverUrl}/auth/dev`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ userId, workspaceId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Auth failed (${response.status})`);
+  }
+
+  const payload = await response.json() as {
+    token: string;
+    expiresAtMs: number;
+  };
+
+  const existing = getSyncConfig();
+  const config: SyncConfig = {
+    serverUrl,
+    userId,
+    workspaceId,
+    deviceId: input.deviceId || existing?.deviceId || generateDeviceId(),
+    token: payload.token,
+    tokenExpiresAtMs: payload.expiresAtMs,
+    importMode: existing?.importMode || 'restore',
+  };
+
+  setSyncConfig(config);
+  syncService = null;
+
+  await getOrInitSyncService();
+  return {
+    serverUrl: config.serverUrl,
+    userId: config.userId,
+    workspaceId: config.workspaceId,
+    deviceId: config.deviceId,
+    tokenExpiresAtMs: config.tokenExpiresAtMs,
+  };
+});
+
+ipcMain.handle('auth:signOut', () => {
+  clearSyncConfig();
+  syncService = null;
+  return true;
+});
+
+ipcMain.handle('inbox:list', async () => {
+  const service = await getOrInitSyncService();
+  return service.listInbox();
+});
+
+ipcMain.handle('capture:quickText', async (_event, input: { title?: string; body: string }) => {
+  const service = await getOrInitSyncService();
+  await service.captureText(input);
+  return service.listInbox();
+});
+
+ipcMain.handle('sync:getStatus', async () => {
+  const config = getSyncConfig();
+  if (!config) {
+    return {
+      pendingEvents: 0,
+      pendingBlobs: 0,
+      lastPulledSeq: 0,
+      lastAppliedSeq: 0,
+      lastError: {
+        code: 'AUTH',
+        message: 'Sign in to enable sync',
+      },
+    };
+  }
+
+  const service = await getOrInitSyncService();
+  return service.getStatus();
+});
+
+ipcMain.handle('sync:now', async () => {
+  const service = await getOrInitSyncService();
+  return service.syncNow();
+});
+
+ipcMain.handle('sync:rebuildProjection', async () => {
+  const service = await getOrInitSyncService();
+  await service.rebuildProjection();
+  return true;
+});
+
+ipcMain.handle('export:create', async () => {
+  const service = await getOrInitSyncService();
+  const bundle = await service.exportBundle();
+
+  const result = await dialog.showSaveDialog({
+    title: 'Export SeedWorld Data',
+    defaultPath: `seedworld-export-${Date.now()}.zip`,
+    filters: [{ name: 'ZIP', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  fs.writeFileSync(result.filePath, bundle);
+  return result.filePath;
+});
+
+ipcMain.handle('diagnostics:getSummary', async () => {
+  const service = await getOrInitSyncService();
+  return service.diagnosticsSummaryTextOnly();
+});
+
+ipcMain.handle('diagnostics:export', async () => {
+  const service = await getOrInitSyncService();
+  const bundle = await service.exportDiagnosticsBundle();
+
+  const result = await dialog.showSaveDialog({
+    title: 'Export Diagnostics',
+    defaultPath: `seedworld-diagnostics-${Date.now()}.zip`,
+    filters: [{ name: 'ZIP', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  fs.writeFileSync(result.filePath, bundle);
+  return result.filePath;
+});
+
+ipcMain.handle('import:fromZip', async (_event, input: { mode: 'restore' | 'clone' }) => {
+  const service = await getOrInitSyncService();
+  const config = getSyncConfig();
+  if (config) {
+    setSyncConfig({ ...config, importMode: input.mode });
+  }
+  const result = await dialog.showOpenDialog({
+    title: 'Import SeedWorld Export',
+    properties: ['openFile'],
+    filters: [{ name: 'ZIP', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return service.importBundle(result.filePaths[0], input.mode);
 });
 
 // --- AI Provider Operations ---
@@ -776,6 +999,11 @@ function registerVaultProtocol(): void {
 app.on('ready', () => {
   // Register custom protocol BEFORE creating window
   registerVaultProtocol();
+  if (getVaultPath() && getSyncConfig()) {
+    getOrInitSyncService().catch((error) => {
+      console.warn('[main] Sync bootstrap skipped:', error);
+    });
+  }
   createWindow();
 });
 

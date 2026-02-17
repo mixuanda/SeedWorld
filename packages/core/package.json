@@ -1,0 +1,21 @@
+{
+  "name": "@seedworld/core",
+  "version": "0.2.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/**/*.test.ts",
+    "lint": "eslint --ext .ts src test"
+  },
+  "dependencies": {
+    "ulid": "^3.0.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.7.3"
+  }
+}

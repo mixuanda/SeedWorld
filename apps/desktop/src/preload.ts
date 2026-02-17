@@ -129,9 +129,94 @@ export interface WhisperAPI {
     onProgress: (callback: (progress: WhisperProgress) => void) => () => void;
 }
 
+export interface AuthConfig {
+    serverUrl: string;
+    userId: string;
+    workspaceId: string;
+    deviceId: string;
+    tokenExpiresAtMs: number;
+}
+
+export interface InboxItem {
+    id: string;
+    atomId: string;
+    title: string;
+    preview: string;
+    createdAtMs: number;
+    updatedAtMs: number;
+    sourceEventId: string;
+    syncStatus:
+        | 'saved_local'
+        | 'waiting_sync'
+        | 'syncing'
+        | 'synced'
+        | 'synced_text_only'
+        | 'media_downloading'
+        | 'sync_failed'
+        | 'blocked_quota_or_storage'
+        | 'blocked_hash_mismatch'
+        | 'blocked_auth';
+    needsResolution: boolean;
+    serverSeq?: number;
+}
+
+export interface SyncError {
+    code: 'NETWORK' | 'AUTH' | 'HASH_MISMATCH' | 'QUOTA' | 'DISK_FULL' | 'SERVER_ERROR';
+    message: string;
+}
+
+export interface SyncStatus {
+    lastSuccessAtMs?: number;
+    pendingEvents: number;
+    pendingBlobs: number;
+    lastError?: SyncError;
+    lastPulledSeq: number;
+    lastAppliedSeq: number;
+}
+
+export interface AuthAPI {
+    getConfig: () => Promise<AuthConfig | null>;
+    devSignIn: (input: { serverUrl: string; userId: string; workspaceId: string; deviceId?: string }) => Promise<AuthConfig>;
+    signOut: () => Promise<boolean>;
+}
+
+export interface InboxAPI {
+    list: () => Promise<InboxItem[]>;
+}
+
+export interface CaptureAPI {
+    quickText: (input: { title?: string; body: string }) => Promise<InboxItem[]>;
+}
+
+export interface SyncAPI {
+    getStatus: () => Promise<SyncStatus>;
+    now: () => Promise<SyncStatus>;
+    rebuildProjection: () => Promise<boolean>;
+}
+
+export interface ExportAPI {
+    create: () => Promise<string | null>;
+}
+
+export interface DiagnosticsAPI {
+    getSummary: () => Promise<string>;
+    export: () => Promise<string | null>;
+}
+
+export interface ImportAPI {
+    fromZip: (input: { mode: 'restore' | 'clone' }) => Promise<{ workspaceId: string; importedEvents: number } | null>;
+}
+
 export interface WorldSeedAPI {
     ping: () => Promise<string>;
     vault: VaultAPI;
+    auth: AuthAPI;
+    inbox: InboxAPI;
+    capture: CaptureAPI;
+    sync: SyncAPI;
+    exportData: ExportAPI;
+    diagnostics: DiagnosticsAPI;
+    importData: ImportAPI;
     ai: AIAPI;
     voice: VoiceAPI;
     attachment: AttachmentAPI;
@@ -172,6 +257,56 @@ contextBridge.exposeInMainWorld('api', {
 
         rebuildIndex: (): Promise<NoteIndex | null> =>
             ipcRenderer.invoke('vault:rebuildIndex'),
+    },
+
+    auth: {
+        getConfig: (): Promise<AuthConfig | null> =>
+            ipcRenderer.invoke('auth:getConfig'),
+
+        devSignIn: (input: { serverUrl: string; userId: string; workspaceId: string; deviceId?: string }): Promise<AuthConfig> =>
+            ipcRenderer.invoke('auth:devSignIn', input),
+
+        signOut: (): Promise<boolean> =>
+            ipcRenderer.invoke('auth:signOut'),
+    },
+
+    inbox: {
+        list: (): Promise<InboxItem[]> =>
+            ipcRenderer.invoke('inbox:list'),
+    },
+
+    capture: {
+        quickText: (input: { title?: string; body: string }): Promise<InboxItem[]> =>
+            ipcRenderer.invoke('capture:quickText', input),
+    },
+
+    sync: {
+        getStatus: (): Promise<SyncStatus> =>
+            ipcRenderer.invoke('sync:getStatus'),
+
+        now: (): Promise<SyncStatus> =>
+            ipcRenderer.invoke('sync:now'),
+
+        rebuildProjection: (): Promise<boolean> =>
+            ipcRenderer.invoke('sync:rebuildProjection'),
+    },
+
+    exportData: {
+        create: (): Promise<string | null> =>
+            ipcRenderer.invoke('export:create'),
+    },
+
+    diagnostics: {
+        getSummary: (): Promise<string> =>
+            ipcRenderer.invoke('diagnostics:getSummary'),
+
+        export: (): Promise<string | null> =>
+            ipcRenderer.invoke('diagnostics:export'),
+    },
+
+    importData: {
+        fromZip: (input: { mode: 'restore' | 'clone' }): Promise<{ workspaceId: string; importedEvents: number } | null> =>
+            ipcRenderer.invoke('import:fromZip', input),
     },
 
     /**
@@ -238,4 +373,4 @@ contextBridge.exposeInMainWorld('api', {
             };
         },
     },
-} satisfies WorldSeedAPI);
+} as WorldSeedAPI);

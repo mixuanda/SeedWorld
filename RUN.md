@@ -1,107 +1,103 @@
-# World-Seed — Run Instructions (Windows)
+# SeedWorld — Run Instructions (MVP Foundations v2.4)
 
 ## Prerequisites
 
-- Node.js 18+ (LTS recommended)
-- npm 9+
+- Node.js 24+
+- npm 11+
 
 ## Install
 
-```powershell
+```bash
 npm install
 ```
 
-## Development
+## Development Commands
 
-```powershell
-npm start
+```bash
+npm run dev:server
+npm run dev:desktop
+npm run dev:web
+npm run dev:mobile
 ```
 
-This starts the Electron app in development mode with hot reload.
+## Desktop Packaging
 
-## Test
-
-```powershell
-npm test
-```
-
-> Note: Tests are placeholder for bootstrap phase.
-
-## Build / Package
-
-```powershell
+```bash
 npm run make
 ```
 
-Creates platform-specific distributables in the `out/` folder.
+## Architecture Snapshot
 
----
+- `apps/desktop`: Electron desktop app (main owns filesystem/secrets/sync).
+- `apps/web`: Vite + React shell.
+- `apps/mobile`: Expo shell.
+- `packages/core`: Shared event model, migrations, projection and sync engine.
+- `services/sync-server`: Self-hosted sync server.
 
-## Security Configuration
+## Sync Server Notes
 
-The app runs with strict Electron security settings:
+Default server URL: `http://127.0.0.1:8787`
 
-| Setting | Value | Description |
-|---------|-------|-------------|
-| `nodeIntegration` | `false` | Node.js APIs not available in renderer |
-| `contextIsolation` | `true` | Preload runs in isolated context |
-| `sandbox` | `true` | Renderer is sandboxed |
+The server stores:
 
-All privileged operations go through the preload bridge (`window.api`).
+- SQLite metadata (`data/sync.db`, WAL mode)
+- Blob bytes in filesystem (`data/blobs/<hash>`)
 
----
+## Local Multi-Device Sync Test
 
-## Vault Structure
+1. Start server: `npm run dev:server`
+2. Launch desktop and web (or mobile):
+   - `npm run dev:desktop`
+   - `npm run dev:web`
+3. In each client sign in with:
+   - same `workspaceId`
+   - different `deviceId` (desktop auto-generated; web/mobile independent)
+4. Create captures offline on each client.
+5. Reconnect network and press **Sync now**.
+6. Verify both clients converge to the same Inbox count with no duplicates.
 
-The vault is a user-selected folder (recommend OneDrive) with this structure:
+## Import/Restore
 
-```
-vault/
-├── notes/              # Atomic notes (.md with YAML frontmatter)
-├── attachments/
-│   └── audio/          # Audio recordings
-├── transcripts/        # Audio transcriptions
-├── changesets/         # AI-generated ChangeSets (.json)
-└── structures/         # Synthesized structure documents
-```
+Desktop import supports:
 
-**On startup**, missing subdirectories are recreated automatically.
+- `Restore`: keep source `workspaceId`
+- `Clone`: generate new `workspaceId` and rewrite imported event workspace references
 
----
+Web/mobile MVP import supports portable state + atoms (blobs may be pulled later by hash).
 
-## Atomic Writes
+## Export Contents
 
-All vault writes use atomic operations to prevent corruption:
+`export.zip` includes:
 
-1. Write to temp file (`.n_abc123.xyz789.tmp`)
-2. `fsync` the file (best effort)
-3. Rename to final filename (atomic on most filesystems)
+- `atoms/`
+- `events/events.jsonl`
+- `blobs/` (available local blob bytes)
+- `portable/state.json`
+- `manifest.json` with:
+  - `eventSchemaVersion`
+  - `minSupportedEventSchemaVersion`
+  - `referencedBlobs`
 
-**Benefits:**
-- Interrupted writes (crash, kill) don't corrupt existing files
-- Worst case: orphaned `.tmp` file (cleaned up on next startup)
-- OneDrive-safe: no partial syncs of incomplete files
+## Diagnostics
 
----
+Diagnostics include:
 
-## Verify IPC
+- last sync success
+- pending events/blobs
+- last error with code
+- last N sync attempts timeline
+- replication cursors (`lastPulledSeq`, `lastAppliedSeq`)
 
-Open DevTools (Ctrl+Shift+I) and run in the console:
+Desktop provides:
 
-```javascript
-await window.api.ping()
-// Expected: "pong"
+- **Copy diagnostics summary**
+- **Export diagnostics ZIP**
 
-await window.api.vault.getPath()
-// Expected: "C:\\Users\\...\\OneDrive\\WorldSeed" (or null if not set)
-```
+## Acceptance Checklist (Phone-friendly)
 
----
-
-## Verify Whisper Add-on
-
-1. Open Settings > Whisper Add-on and confirm "Detected: win32 / x64" plus "Not installed".
-2. Choose the `base` model and click "Download & Install".
-3. Record a ~5s voice note.
-4. Use Transcribe (if available) to transcribe the note.
-5. Confirm the transcription succeeds and audio playback/seek works for the saved `.webm`.
+- [ ] Capture in Web/Mobile shows immediately as saved locally.
+- [ ] Turn on airplane mode (or disable network), capture still succeeds.
+- [ ] Re-enable network and press **Sync now**; capture appears on Desktop.
+- [ ] Run concurrent edits on one atom from two clients; conflict is preserved as needs-resolution.
+- [ ] Export ZIP succeeds and includes required folders/files.
+- [ ] Import restore/clone works with clear mode selection and resulting workspace behavior.

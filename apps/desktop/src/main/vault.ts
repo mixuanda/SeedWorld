@@ -54,8 +54,10 @@ export interface NoteIndexEntry {
 export const VAULT_DIRS = {
     notes: 'notes',
     attachmentsAudio: 'attachments/audio',
+    attachmentsBlobs: 'attachments/blobs',
     transcripts: 'transcripts',
     changesets: 'changesets',
+    links: 'links',
     structures: 'structures',
 } as const;
 

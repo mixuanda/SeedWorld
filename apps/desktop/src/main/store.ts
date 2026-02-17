@@ -19,6 +19,18 @@ import type { ProviderConfig } from './ai-provider';
 interface StoreData {
     vaultPath: string | null;
     aiConfig: ProviderConfig | null;
+    syncConfig?: SyncConfig | null;
+    whisperManifestUrl?: string;
+}
+
+export interface SyncConfig {
+    serverUrl: string;
+    userId: string;
+    workspaceId: string;
+    deviceId: string;
+    token: string;
+    tokenExpiresAtMs: number;
+    importMode?: 'restore' | 'clone';
 }
 
 const STORE_FILENAME = 'world-seed-settings.json';
@@ -126,12 +138,40 @@ export function getAIConfigForRenderer(): Omit<ProviderConfig, 'apiKey'> | null 
 
 export function getWhisperManifestUrl(): string | null {
     const data = loadStore();
-    return (data as StoreData & { whisperManifestUrl?: string }).whisperManifestUrl || null;
+    return data.whisperManifestUrl || null;
 }
 
 export function setWhisperManifestUrl(url: string): void {
-    const data = loadStore() as StoreData & { whisperManifestUrl?: string };
+    const data = loadStore();
     data.whisperManifestUrl = url;
-    saveStore(data as StoreData);
+    saveStore(data);
     console.log('[store] Whisper manifest URL updated:', url);
+}
+
+// ============================================================================
+// Sync Config
+// ============================================================================
+
+export function getSyncConfig(): SyncConfig | null {
+    const data = loadStore();
+    return data.syncConfig || null;
+}
+
+export function setSyncConfig(config: SyncConfig): void {
+    const data = loadStore();
+    data.syncConfig = config;
+    saveStore(data);
+    console.log('[store] Sync config updated:', {
+        serverUrl: config.serverUrl,
+        workspaceId: config.workspaceId,
+        userId: config.userId,
+        deviceId: config.deviceId,
+        tokenExpiresAtMs: config.tokenExpiresAtMs,
+    });
+}
+
+export function clearSyncConfig(): void {
+    const data = loadStore();
+    data.syncConfig = null;
+    saveStore(data);
 }

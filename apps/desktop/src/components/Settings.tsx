@@ -86,7 +86,7 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
                 mode: 'local',
                 baseUrl: baseUrl.trim(),
                 model: model.trim(),
-            } satisfies LocalProviderConfig;
+            } as LocalProviderConfig;
         }
         // Online mode would need API key input (not implemented in this local-first version)
         throw new Error('Online mode not yet implemented');
@@ -381,7 +381,7 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
                                     <div className="whisper-progress-bar">
                                         <div
                                             className="whisper-progress-fill"
-                                            style={{ width: `${whisperProgress.percent}%` }}
+                                            style={{ width: `${whisperProgress?.percent ?? 0}%` }}
                                         />
                                     </div>
                                 )}

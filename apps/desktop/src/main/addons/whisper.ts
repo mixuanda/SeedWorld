@@ -426,7 +426,7 @@ export async function getWhisperStatus(): Promise<WhisperStatus> {
     let manifest: WhisperManifest | null = null;
     let manifestError: string | null = null;
     let packageInfo: ResolvedWhisperPackage | null = null;
-    let availableModels = [...DEFAULT_WHISPER_MODELS];
+    let availableModels: string[] = [...DEFAULT_WHISPER_MODELS];
     let manifestVersion: string | null = null;
 
     if (platformSupported) {
