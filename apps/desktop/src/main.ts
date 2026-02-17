@@ -13,6 +13,8 @@ import {
   getSyncConfig,
   setSyncConfig,
   clearSyncConfig,
+  getLocalWorkspace,
+  setLocalWorkspace,
   type SyncConfig,
 } from './main/store';
 import {
@@ -47,6 +49,7 @@ import {
 import { DesktopSyncService } from './main/sync/service';
 
 let syncService: DesktopSyncService | null = null;
+let syncServiceCacheKey: string | null = null;
 
 // Custom protocol for serving vault files securely
 const VAULT_PROTOCOL = 'seedworld';
@@ -71,31 +74,51 @@ if (started) {
   app.quit();
 }
 
-function generateDeviceId(): string {
-  return `dev_${randomBytes(8).toString('hex')}`;
+function resetSyncService(): void {
+  syncService = null;
+  syncServiceCacheKey = null;
+}
+
+function resolveSyncBootstrap(vaultPath: string): { key: string; config: Parameters<typeof DesktopSyncService.create>[0] } {
+  const syncConfig = getSyncConfig();
+  if (syncConfig) {
+    return {
+      key: `remote:${vaultPath}:${syncConfig.workspaceId}:${syncConfig.deviceId}:${syncConfig.serverUrl}`,
+      config: {
+        vaultPath,
+        serverUrl: syncConfig.serverUrl,
+        userId: syncConfig.userId,
+        workspaceId: syncConfig.workspaceId,
+        deviceId: syncConfig.deviceId,
+        token: syncConfig.token,
+      },
+    };
+  }
+
+  const localWorkspace = getLocalWorkspace();
+  return {
+    key: `local:${vaultPath}:${localWorkspace.localWorkspaceId}:${localWorkspace.localDeviceId}:${localWorkspace.localUserId}`,
+    config: {
+      vaultPath,
+      userId: localWorkspace.localUserId,
+      workspaceId: localWorkspace.localWorkspaceId,
+      deviceId: localWorkspace.localDeviceId,
+    },
+  };
 }
 
 async function getOrInitSyncService(): Promise<DesktopSyncService> {
   const vaultPath = getVaultPath();
-  const syncConfig = getSyncConfig();
 
   if (!vaultPath) {
     throw new Error('No vault configured');
   }
 
-  if (!syncConfig) {
-    throw new Error('Not signed in to sync');
-  }
+  const { key, config } = resolveSyncBootstrap(vaultPath);
 
-  if (!syncService) {
-    syncService = DesktopSyncService.create({
-      vaultPath,
-      serverUrl: syncConfig.serverUrl,
-      userId: syncConfig.userId,
-      workspaceId: syncConfig.workspaceId,
-      deviceId: syncConfig.deviceId,
-      token: syncConfig.token,
-    });
+  if (!syncService || syncServiceCacheKey !== key) {
+    syncService = DesktopSyncService.create(config);
+    syncServiceCacheKey = key;
   }
 
   return syncService;
@@ -132,7 +155,7 @@ ipcMain.handle('vault:selectFolder', async () => {
     ensureVaultStructure(selectedPath);
     // Save to local store
     setVaultPath(selectedPath);
-    syncService = null;
+    resetSyncService();
     console.log(`[main] Vault path set to: ${selectedPath}`);
     return selectedPath;
   } catch (error) {
@@ -242,15 +265,25 @@ ipcMain.handle('auth:getConfig', () => {
   };
 });
 
+ipcMain.handle('auth:getLocalWorkspace', () => {
+  const localWorkspace = getLocalWorkspace();
+  return {
+    workspaceId: localWorkspace.localWorkspaceId,
+    deviceId: localWorkspace.localDeviceId,
+    userId: localWorkspace.localUserId,
+  };
+});
+
 ipcMain.handle('auth:devSignIn', async (_event, input: {
   serverUrl: string;
-  userId: string;
-  workspaceId: string;
+  userId?: string;
+  workspaceId?: string;
   deviceId?: string;
 }) => {
+  const localWorkspace = getLocalWorkspace();
   const serverUrl = input.serverUrl.trim().replace(/\/+$/, '');
-  const userId = input.userId.trim();
-  const workspaceId = input.workspaceId.trim();
+  const userId = (input.userId || localWorkspace.localUserId).trim();
+  const workspaceId = (input.workspaceId || localWorkspace.localWorkspaceId).trim();
 
   if (!serverUrl || !userId || !workspaceId) {
     throw new Error('serverUrl, userId, and workspaceId are required');
@@ -278,14 +311,19 @@ ipcMain.handle('auth:devSignIn', async (_event, input: {
     serverUrl,
     userId,
     workspaceId,
-    deviceId: input.deviceId || existing?.deviceId || generateDeviceId(),
+    deviceId: input.deviceId || existing?.deviceId || localWorkspace.localDeviceId,
     token: payload.token,
     tokenExpiresAtMs: payload.expiresAtMs,
     importMode: existing?.importMode || 'restore',
   };
 
+  setLocalWorkspace({
+    localWorkspaceId: config.workspaceId,
+    localDeviceId: config.deviceId,
+    localUserId: config.userId,
+  });
   setSyncConfig(config);
-  syncService = null;
+  resetSyncService();
 
   await getOrInitSyncService();
   return {
@@ -299,7 +337,7 @@ ipcMain.handle('auth:devSignIn', async (_event, input: {
 
 ipcMain.handle('auth:signOut', () => {
   clearSyncConfig();
-  syncService = null;
+  resetSyncService();
   return true;
 });
 
@@ -315,17 +353,12 @@ ipcMain.handle('capture:quickText', async (_event, input: { title?: string; body
 });
 
 ipcMain.handle('sync:getStatus', async () => {
-  const config = getSyncConfig();
-  if (!config) {
+  if (!getVaultPath()) {
     return {
       pendingEvents: 0,
       pendingBlobs: 0,
       lastPulledSeq: 0,
       lastAppliedSeq: 0,
-      lastError: {
-        code: 'AUTH',
-        message: 'Sign in to enable sync',
-      },
     };
   }
 
@@ -999,7 +1032,7 @@ function registerVaultProtocol(): void {
 app.on('ready', () => {
   // Register custom protocol BEFORE creating window
   registerVaultProtocol();
-  if (getVaultPath() && getSyncConfig()) {
+  if (getVaultPath()) {
     getOrInitSyncService().catch((error) => {
       console.warn('[main] Sync bootstrap skipped:', error);
     });

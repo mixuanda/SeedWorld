@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import JSZip from 'jszip';
 import {
   buildExportSnapshot,
+  createDisabledSyncTransport,
   createHttpSyncTransport,
   generateEventId,
   migrateEvent,
@@ -20,11 +21,11 @@ import { DesktopSqliteStorageAdapter } from './sqlite-adapter';
 
 export interface DesktopSyncBootstrap {
   vaultPath: string;
-  serverUrl: string;
   userId: string;
   workspaceId: string;
   deviceId: string;
-  token: string;
+  serverUrl?: string;
+  token?: string;
 }
 
 interface DiagnosticsSummary {
@@ -81,10 +82,12 @@ export class DesktopSyncService {
       deviceId: config.deviceId,
     });
 
-    const transport = createHttpSyncTransport({
-      baseUrl: config.serverUrl,
-      token: config.token,
-    });
+    const transport = config.serverUrl && config.token
+      ? createHttpSyncTransport({
+          baseUrl: config.serverUrl,
+          token: config.token,
+        })
+      : createDisabledSyncTransport('AUTH: Sign in required for sync');
 
     const engine = new SyncEngine({
       storage: adapter,

@@ -137,6 +137,12 @@ export interface AuthConfig {
     tokenExpiresAtMs: number;
 }
 
+export interface LocalWorkspaceIdentity {
+    workspaceId: string;
+    deviceId: string;
+    userId: string;
+}
+
 export interface InboxItem {
     id: string;
     atomId: string;
@@ -176,6 +182,7 @@ export interface SyncStatus {
 
 export interface AuthAPI {
     getConfig: () => Promise<AuthConfig | null>;
+    getLocalWorkspace: () => Promise<LocalWorkspaceIdentity>;
     devSignIn: (input: { serverUrl: string; userId: string; workspaceId: string; deviceId?: string }) => Promise<AuthConfig>;
     signOut: () => Promise<boolean>;
 }
@@ -262,6 +269,9 @@ contextBridge.exposeInMainWorld('api', {
     auth: {
         getConfig: (): Promise<AuthConfig | null> =>
             ipcRenderer.invoke('auth:getConfig'),
+
+        getLocalWorkspace: (): Promise<LocalWorkspaceIdentity> =>
+            ipcRenderer.invoke('auth:getLocalWorkspace'),
 
         devSignIn: (input: { serverUrl: string; userId: string; workspaceId: string; deviceId?: string }): Promise<AuthConfig> =>
             ipcRenderer.invoke('auth:devSignIn', input),

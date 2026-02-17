@@ -175,6 +175,14 @@ export class DesktopSqliteStorageAdapter implements StorageAdapter {
           ) VALUES (?, ?, ?, 1, 0, 0, 0)`
         )
         .run(this.workspaceId, config.userId, config.deviceId);
+    } else {
+      this.db
+        .prepare(
+          `UPDATE device_state
+           SET user_id = ?, device_id = ?
+           WHERE workspace_id = ?`
+        )
+        .run(config.userId, config.deviceId, this.workspaceId);
     }
   }
 

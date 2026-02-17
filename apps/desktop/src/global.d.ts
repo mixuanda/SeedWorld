@@ -20,6 +20,7 @@ export type {
   WhisperProgress,
   WhisperAPI,
   AuthConfig,
+  LocalWorkspaceIdentity,
   InboxItem,
   SyncError,
   SyncStatus,

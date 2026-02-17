@@ -3,6 +3,7 @@ import type { InboxItem, SyncStatus } from './preload';
 import { VaultSetup } from './components/VaultSetup';
 
 type AppState = 'loading' | 'setup' | 'ready';
+type ViewMode = 'inbox' | 'settings';
 
 interface SignInForm {
   serverUrl: string;
@@ -11,9 +12,9 @@ interface SignInForm {
 }
 
 const DEFAULT_SIGN_IN: SignInForm = {
-  serverUrl: 'http://127.0.0.1:8787',
-  userId: 'dev-user',
-  workspaceId: 'workspace-1',
+  serverUrl: '',
+  userId: 'local-user',
+  workspaceId: '',
 };
 
 function formatTimestamp(value?: number): string {
@@ -52,6 +53,7 @@ function statusLabel(status: InboxItem['syncStatus']): string {
 
 export function App(): React.ReactElement {
   const [appState, setAppState] = useState<AppState>('loading');
+  const [view, setView] = useState<ViewMode>('inbox');
   const [vaultPath, setVaultPath] = useState<string | null>(null);
   const [pingResult, setPingResult] = useState<string | null>(null);
 
@@ -100,16 +102,19 @@ export function App(): React.ReactElement {
         setVaultPath(existingVaultPath);
         setAppState('ready');
 
-        const auth = await window.api.auth.getConfig();
-        if (auth) {
-          setSignIn({
-            serverUrl: auth.serverUrl,
-            userId: auth.userId,
-            workspaceId: auth.workspaceId,
-          });
-          setSignedIn(true);
-          await loadInboxAndStatus();
-        }
+        const [localWorkspace, auth] = await Promise.all([
+          window.api.auth.getLocalWorkspace(),
+          window.api.auth.getConfig(),
+        ]);
+
+        setSignIn({
+          serverUrl: auth?.serverUrl || '',
+          userId: auth?.userId || localWorkspace.userId,
+          workspaceId: auth?.workspaceId || localWorkspace.workspaceId,
+        });
+        setSignedIn(Boolean(auth));
+
+        await loadInboxAndStatus();
       } catch (initError) {
         console.error('[App] Failed to initialize app', initError);
         setError(initError instanceof Error ? initError.message : 'Initialization failed');
@@ -124,8 +129,18 @@ export function App(): React.ReactElement {
   const handleVaultSelected = useCallback(async (selectedPath: string) => {
     setVaultPath(selectedPath);
     setAppState('ready');
-    setMessage('Vault configured. Sign in to start sync.');
-  }, []);
+    setError(null);
+    setMessage('Vault configured. Capture works offline; sign in from Settings to enable sync.');
+
+    const localWorkspace = await window.api.auth.getLocalWorkspace();
+    setSignIn((prev) => ({
+      ...prev,
+      userId: localWorkspace.userId,
+      workspaceId: localWorkspace.workspaceId,
+    }));
+
+    await loadInboxAndStatus();
+  }, [loadInboxAndStatus]);
 
   const handleSignIn = useCallback(async () => {
     setError(null);
@@ -133,13 +148,23 @@ export function App(): React.ReactElement {
     setIsSigningIn(true);
 
     try {
-      await window.api.auth.devSignIn({
+      if (!signIn.serverUrl.trim()) {
+        throw new Error('Server URL is required. Use your LAN URL for phone testing.');
+      }
+
+      const auth = await window.api.auth.devSignIn({
         serverUrl: signIn.serverUrl,
         userId: signIn.userId,
         workspaceId: signIn.workspaceId,
       });
+
+      setSignIn({
+        serverUrl: auth.serverUrl,
+        userId: auth.userId,
+        workspaceId: auth.workspaceId,
+      });
       setSignedIn(true);
-      setMessage('Signed in.');
+      setMessage('Signed in. Sync is enabled.');
       await loadInboxAndStatus();
     } catch (signInError) {
       console.error('[App] Sign in failed', signInError);
@@ -150,12 +175,21 @@ export function App(): React.ReactElement {
   }, [loadInboxAndStatus, signIn.serverUrl, signIn.userId, signIn.workspaceId]);
 
   const handleSignOut = useCallback(async () => {
+    setError(null);
+    setMessage(null);
+
     await window.api.auth.signOut();
+    const localWorkspace = await window.api.auth.getLocalWorkspace();
+
+    setSignIn((prev) => ({
+      ...prev,
+      userId: localWorkspace.userId,
+      workspaceId: localWorkspace.workspaceId,
+    }));
     setSignedIn(false);
-    setInbox([]);
-    setSyncStatus(null);
-    setMessage('Signed out.');
-  }, []);
+    setMessage('Signed out. Local capture remains available.');
+    await loadInboxAndStatus();
+  }, [loadInboxAndStatus]);
 
   const handleCapture = useCallback(async () => {
     if (!captureBody.trim()) {
@@ -269,7 +303,20 @@ export function App(): React.ReactElement {
     }
   }, [importMode, loadInboxAndStatus]);
 
-  const syncSummary = useMemo(() => {
+  const compactSyncSummary = useMemo(() => {
+    if (!syncStatus) {
+      return 'No sync status yet';
+    }
+
+    return [
+      `Last success ${formatTimestamp(syncStatus.lastSuccessAtMs)}`,
+      `${syncStatus.pendingEvents} event(s) pending`,
+      `${syncStatus.pendingBlobs} blob(s) pending`,
+      syncStatus.lastError ? `Error ${syncStatus.lastError.code}` : 'No errors',
+    ].join(' · ');
+  }, [syncStatus]);
+
+  const fullSyncSummary = useMemo(() => {
     if (!syncStatus) {
       return 'No sync status yet.';
     }
@@ -301,106 +348,178 @@ export function App(): React.ReactElement {
   return (
     <div className="app">
       <header className="header">
-        <h1>SeedWorld Inbox</h1>
-        <div className="header-right">
+        <h1>SeedWorld</h1>
+        <div className="header-right" style={{ gap: 8 }}>
           {pingResult && <span className="ping-status">IPC OK</span>}
           {vaultPath && <span className="vault-status" title={vaultPath}>Vault Ready</span>}
         </div>
       </header>
 
-      <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Dev Sign-in</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-          <input
-            className="note-input"
-            value={signIn.serverUrl}
-            onChange={(event) => setSignIn((prev) => ({ ...prev, serverUrl: event.target.value }))}
-            placeholder="Server URL"
-          />
-          <input
-            className="note-input"
-            value={signIn.userId}
-            onChange={(event) => setSignIn((prev) => ({ ...prev, userId: event.target.value }))}
-            placeholder="User ID"
-          />
-          <input
-            className="note-input"
-            value={signIn.workspaceId}
-            onChange={(event) => setSignIn((prev) => ({ ...prev, workspaceId: event.target.value }))}
-            placeholder="Workspace ID"
-          />
-        </div>
-        <div className="capture-actions">
-          <button className="save-button" disabled={isSigningIn} onClick={handleSignIn}>
-            {isSigningIn ? 'Signing in...' : 'Sign in'}
-          </button>
-          <button className="save-button" disabled={!signedIn} onClick={handleSignOut}>
-            Sign out
-          </button>
-        </div>
-      </section>
+      <nav style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button
+          className="save-button"
+          onClick={() => setView('inbox')}
+          style={{ opacity: view === 'inbox' ? 1 : 0.8 }}
+        >
+          Inbox
+        </button>
+        <button
+          className="save-button"
+          onClick={() => setView('settings')}
+          style={{ opacity: view === 'settings' ? 1 : 0.8 }}
+        >
+          Settings
+        </button>
+      </nav>
 
-      <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Quick Capture</h2>
-        <input
-          className="note-input"
-          value={captureTitle}
-          onChange={(event) => setCaptureTitle(event.target.value)}
-          placeholder="Title (optional)"
-          disabled={!signedIn || busy === 'capture'}
-        />
-        <textarea
-          className="note-input"
-          placeholder="Capture text..."
-          value={captureBody}
-          onChange={(event) => setCaptureBody(event.target.value)}
-          disabled={!signedIn || busy === 'capture'}
-        />
-        <div className="capture-actions">
-          <button
-            className="save-button"
-            onClick={handleCapture}
-            disabled={!signedIn || !captureBody.trim() || busy === 'capture'}
-          >
-            {busy === 'capture' ? 'Saving...' : 'Save Locally'}
-          </button>
-          <button className="save-button" onClick={handleSyncNow} disabled={!signedIn || busy === 'sync'}>
-            {busy === 'sync' ? 'Syncing...' : 'Sync now'}
-          </button>
-        </div>
-      </section>
+      {view === 'inbox' ? (
+        <>
+          <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Quick Capture</h2>
+            <input
+              className="note-input"
+              value={captureTitle}
+              onChange={(event) => setCaptureTitle(event.target.value)}
+              placeholder="Title (optional)"
+              disabled={busy === 'capture'}
+            />
+            <textarea
+              className="note-input"
+              placeholder="Capture text..."
+              value={captureBody}
+              onChange={(event) => setCaptureBody(event.target.value)}
+              disabled={busy === 'capture'}
+            />
+            <div className="capture-actions">
+              <button
+                className="save-button"
+                onClick={handleCapture}
+                disabled={!captureBody.trim() || busy === 'capture'}
+              >
+                {busy === 'capture' ? 'Saving...' : 'Save Locally'}
+              </button>
+            </div>
+          </section>
 
-      <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Sync Status</h2>
-        <p style={{ margin: 0 }}>{syncSummary}</p>
-        <div className="capture-actions">
-          <button className="save-button" onClick={handleExport} disabled={!signedIn || busy === 'export'}>
-            Export ZIP
-          </button>
-          <button className="save-button" onClick={handleDiagnosticsCopy} disabled={!signedIn || busy === 'diagnostics'}>
-            Copy diagnostics summary
-          </button>
-          <button className="save-button" onClick={handleDiagnosticsExport} disabled={!signedIn || busy === 'diagnostics-export'}>
-            Export diagnostics ZIP
-          </button>
-        </div>
-        <div className="capture-actions">
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            Import mode
-            <select
-              value={importMode}
-              onChange={(event) => setImportMode(event.target.value as 'restore' | 'clone')}
-              disabled={!signedIn || busy === 'import'}
-            >
-              <option value="restore">Restore (keep workspaceId)</option>
-              <option value="clone">Clone (new workspaceId)</option>
-            </select>
-          </label>
-          <button className="save-button" onClick={handleImport} disabled={!signedIn || busy === 'import'}>
-            {busy === 'import' ? 'Importing...' : 'Import/Restore ZIP'}
-          </button>
-        </div>
-      </section>
+          <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Sync</h2>
+            <p style={{ margin: 0 }}>{compactSyncSummary}</p>
+            {!signedIn && <p style={{ margin: 0 }}>Sync is off. Sign in from Settings.</p>}
+            <div className="capture-actions">
+              <button className="save-button" onClick={() => setView('settings')}>Open Settings</button>
+            </div>
+          </section>
+
+          <main className="main-split">
+            <aside className="panel-left" style={{ width: '100%' }}>
+              <h2>Inbox ({inbox.length})</h2>
+              {inbox.length === 0 ? (
+                <div className="notes-list-empty">
+                  <p>No items yet</p>
+                </div>
+              ) : (
+                <ul className="notes-list">
+                  {inbox.map((item) => (
+                    <li key={item.id} className="notes-list-item">
+                      <div className="notes-list-item-title">{item.title}</div>
+                      <div className="notes-list-item-meta">
+                        <span className="notes-list-item-id">{item.id}</span>
+                        <span className="notes-list-item-date">{statusLabel(item.syncStatus)}</span>
+                      </div>
+                      <div className="notes-list-item-preview">{item.preview}</div>
+                      {item.needsResolution && (
+                        <div className="notes-list-item-meta">
+                          <span className="notes-list-item-id">Needs resolution</span>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </aside>
+          </main>
+        </>
+      ) : (
+        <>
+          <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Account & Sync (Dev Auth)</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+              <input
+                className="note-input"
+                value={signIn.serverUrl}
+                onChange={(event) => setSignIn((prev) => ({ ...prev, serverUrl: event.target.value }))}
+                placeholder="http://<LAN-IP>:8787"
+              />
+              <input
+                className="note-input"
+                value={signIn.userId}
+                onChange={(event) => setSignIn((prev) => ({ ...prev, userId: event.target.value }))}
+                placeholder="User ID"
+              />
+              <input
+                className="note-input"
+                value={signIn.workspaceId}
+                onChange={(event) => setSignIn((prev) => ({ ...prev, workspaceId: event.target.value }))}
+                placeholder="Workspace ID"
+              />
+            </div>
+            <p style={{ margin: 0, fontSize: 12 }}>For phone/LAN testing, use your computer IP instead of 127.0.0.1.</p>
+            <div className="capture-actions">
+              <button className="save-button" disabled={isSigningIn} onClick={handleSignIn}>
+                {isSigningIn ? 'Signing in...' : 'Dev Sign In'}
+              </button>
+              <button className="save-button" disabled={!signedIn} onClick={handleSignOut}>
+                Sign out
+              </button>
+              <button className="save-button" disabled={!signedIn || busy === 'sync'} onClick={handleSyncNow}>
+                {busy === 'sync' ? 'Syncing...' : 'Sync now'}
+              </button>
+            </div>
+            <p style={{ margin: 0 }}>{fullSyncSummary}</p>
+            {syncStatus?.lastError && (
+              <details>
+                <summary>{syncStatus.lastError.message}</summary>
+                <pre>{JSON.stringify(syncStatus.lastError, null, 2)}</pre>
+              </details>
+            )}
+          </section>
+
+          <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Import / Export</h2>
+            <div className="capture-actions">
+              <button className="save-button" onClick={handleExport} disabled={busy === 'export'}>
+                Export ZIP
+              </button>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                Import mode
+                <select
+                  value={importMode}
+                  onChange={(event) => setImportMode(event.target.value as 'restore' | 'clone')}
+                  disabled={busy === 'import'}
+                >
+                  <option value="restore">Restore (keep workspaceId)</option>
+                  <option value="clone">Clone (new workspaceId)</option>
+                </select>
+              </label>
+              <button className="save-button" onClick={handleImport} disabled={busy === 'import'}>
+                {busy === 'import' ? 'Importing...' : 'Import/Restore ZIP'}
+              </button>
+            </div>
+          </section>
+
+          <section className="capture-section" style={{ display: 'grid', gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Diagnostics</h2>
+            <div className="capture-actions">
+              <button className="save-button" onClick={handleDiagnosticsCopy} disabled={busy === 'diagnostics'}>
+                Copy diagnostics summary
+              </button>
+              <button className="save-button" onClick={handleDiagnosticsExport} disabled={busy === 'diagnostics-export'}>
+                Export diagnostics ZIP
+              </button>
+            </div>
+          </section>
+        </>
+      )}
 
       {(error || message) && (
         <section className="capture-section" style={{ marginTop: 8 }}>
@@ -408,35 +527,6 @@ export function App(): React.ReactElement {
           {error && <p style={{ margin: 0, color: '#b00020' }}>{error}</p>}
         </section>
       )}
-
-      <main className="main-split">
-        <aside className="panel-left" style={{ width: '100%' }}>
-          <h2>Inbox ({inbox.length})</h2>
-          {inbox.length === 0 ? (
-            <div className="notes-list-empty">
-              <p>No items yet</p>
-            </div>
-          ) : (
-            <ul className="notes-list">
-              {inbox.map((item) => (
-                <li key={item.id} className="notes-list-item">
-                  <div className="notes-list-item-title">{item.title}</div>
-                  <div className="notes-list-item-meta">
-                    <span className="notes-list-item-id">{item.id}</span>
-                    <span className="notes-list-item-date">{statusLabel(item.syncStatus)}</span>
-                  </div>
-                  <div className="notes-list-item-preview">{item.preview}</div>
-                  {item.needsResolution && (
-                    <div className="notes-list-item-meta">
-                      <span className="notes-list-item-id">Needs resolution</span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
-      </main>
     </div>
   );
 }

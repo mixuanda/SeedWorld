@@ -23,7 +23,8 @@ interface ConflictRow {
 }
 
 const PORT = Number(process.env.PORT || 8787);
-const HOST = process.env.HOST || '127.0.0.1';
+const DEFAULT_HOST = process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0';
+const HOST = process.env.HOST || DEFAULT_HOST;
 const SECRET = process.env.DEV_AUTH_SECRET || 'seedworld-dev-secret';
 const DATA_DIR = path.resolve(process.env.SYNC_SERVER_DATA_DIR || path.join(process.cwd(), 'data'));
 const BLOBS_DIR = path.join(DATA_DIR, 'blobs');
@@ -138,19 +139,37 @@ function verifyToken(token: string): AuthPayload | null {
   }
 }
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
+function corsOriginFor(req: IncomingMessage): string {
+  const originHeader = req.headers.origin;
+  if (typeof originHeader === 'string' && originHeader.length > 0) {
+    return originHeader;
+  }
+  return '*';
+}
+
+function withCorsHeaders(req: IncomingMessage, headers: Record<string, string | number>): Record<string, string | number> {
+  return {
+    'access-control-allow-origin': corsOriginFor(req),
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'Content-Type, Authorization, Range',
+    'access-control-expose-headers': 'Content-Range, Accept-Ranges, Content-Length',
+    'access-control-max-age': '600',
+    ...(typeof req.headers.origin === 'string' && req.headers.origin.length > 0 ? { vary: 'Origin' } : {}),
+    ...headers,
+  };
+}
+
+function sendJson(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
-  res.writeHead(status, {
+  res.writeHead(status, withCorsHeaders(req, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
-    'access-control-allow-headers': 'authorization,content-type',
-  });
+  }));
   res.end(payload);
 }
 
 function sendError(
+  req: IncomingMessage,
   res: ServerResponse,
   status: number,
   code: string,
@@ -158,7 +177,7 @@ function sendError(
   retryable: boolean,
   details?: string,
 ): void {
-  sendJson(res, status, {
+  sendJson(req, res, status, {
     code,
     message,
     retryable,
@@ -237,7 +256,7 @@ async function handleAuthDev(req: IncomingMessage, res: ServerResponse): Promise
   const workspaceId = body.workspaceId?.trim();
 
   if (!userId || !workspaceId) {
-    sendError(res, 400, 'AUTH', 'userId and workspaceId are required', false);
+    sendError(req, res, 400, 'AUTH', 'userId and workspaceId are required', false);
     return;
   }
 
@@ -248,7 +267,7 @@ async function handleAuthDev(req: IncomingMessage, res: ServerResponse): Promise
     exp: expiresAtMs,
   });
 
-  sendJson(res, 200, {
+  sendJson(req, res, 200, {
     token,
     userId,
     workspaceId,
@@ -266,12 +285,12 @@ async function handleSyncPush(req: IncomingMessage, res: ServerResponse, auth: A
   };
 
   if (body.workspaceId !== auth.workspaceId || body.userId !== auth.userId) {
-    sendError(res, 403, 'AUTH', 'Token workspace/user mismatch', false);
+    sendError(req, res, 403, 'AUTH', 'Token workspace/user mismatch', false);
     return;
   }
 
   if (!Array.isArray(body.events)) {
-    sendError(res, 400, 'SERVER_ERROR', 'events must be an array', false);
+    sendError(req, res, 400, 'SERVER_ERROR', 'events must be an array', false);
     return;
   }
 
@@ -347,7 +366,7 @@ async function handleSyncPush(req: IncomingMessage, res: ServerResponse, auth: A
     throw error;
   }
 
-  sendJson(res, 200, {
+  sendJson(req, res, 200, {
     accepted,
     cursor: getWorkspaceCursor(auth.workspaceId),
     missingBlobHashes: Array.from(missingBlobHashes),
@@ -435,7 +454,7 @@ async function handleSyncPull(req: IncomingMessage, res: ServerResponse, auth: A
 
   const newCursor = events.length > 0 ? (events[events.length - 1].serverSeq as number) : cursor;
 
-  sendJson(res, 200, {
+  sendJson(req, res, 200, {
     events,
     cursor: newCursor,
     conflicts,
@@ -449,7 +468,7 @@ async function handleBlobUpload(req: IncomingMessage, res: ServerResponse, auth:
   const extHint = requestUrl.searchParams.get('ext') || undefined;
 
   if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
-    sendError(res, 400, 'HASH_MISMATCH', 'Query parameter "hash" must be a sha256 hex digest', false);
+    sendError(req, res, 400, 'HASH_MISMATCH', 'Query parameter "hash" must be a sha256 hex digest', false);
     return;
   }
 
@@ -482,7 +501,7 @@ async function handleBlobUpload(req: IncomingMessage, res: ServerResponse, auth:
     } catch {
       // ignore cleanup errors
     }
-    sendError(res, 400, 'HASH_MISMATCH', `Blob hash mismatch. expected=${hash}, got=${computedHash}`, false);
+    sendError(req, res, 400, 'HASH_MISMATCH', `Blob hash mismatch. expected=${hash}, got=${computedHash}`, false);
     return;
   }
 
@@ -499,7 +518,7 @@ async function handleBlobUpload(req: IncomingMessage, res: ServerResponse, auth:
      DO UPDATE SET size = excluded.size, content_type = excluded.content_type, path = excluded.path`
   ).run(auth.workspaceId, hash, byteLength, contentType, nowMs(), targetPath);
 
-  sendJson(res, 200, {
+  sendJson(req, res, 200, {
     hash,
     size: byteLength,
     contentType,
@@ -512,7 +531,7 @@ async function handleBlobFetch(req: IncomingMessage, res: ServerResponse, auth: 
     .get(auth.workspaceId, hash) as { path: string; size: number; content_type: string } | undefined;
 
   if (!row || !fs.existsSync(row.path)) {
-    sendError(res, 404, 'SERVER_ERROR', `Blob not found for hash ${hash}`, false);
+    sendError(req, res, 404, 'SERVER_ERROR', `Blob not found for hash ${hash}`, false);
     return;
   }
 
@@ -523,12 +542,11 @@ async function handleBlobFetch(req: IncomingMessage, res: ServerResponse, auth: 
   const range = parseRangeHeader(rangeHeader, fileSize);
 
   if (rangeHeader && !range) {
-    res.writeHead(416, {
+    res.writeHead(416, withCorsHeaders(req, {
       'content-type': row.content_type,
       'content-range': `bytes */${fileSize}`,
       'accept-ranges': 'bytes',
-      'access-control-allow-origin': '*',
-    });
+    }));
     res.end();
     return;
   }
@@ -537,24 +555,22 @@ async function handleBlobFetch(req: IncomingMessage, res: ServerResponse, auth: 
     const [start, end] = range;
     const chunkSize = end - start + 1;
 
-    res.writeHead(206, {
+    res.writeHead(206, withCorsHeaders(req, {
       'content-type': row.content_type,
       'content-length': chunkSize,
       'content-range': `bytes ${start}-${end}/${fileSize}`,
       'accept-ranges': 'bytes',
-      'access-control-allow-origin': '*',
-    });
+    }));
 
     fs.createReadStream(row.path, { start, end }).pipe(res);
     return;
   }
 
-  res.writeHead(200, {
+  res.writeHead(200, withCorsHeaders(req, {
     'content-type': row.content_type,
     'content-length': fileSize,
     'accept-ranges': 'bytes',
-    'access-control-allow-origin': '*',
-  });
+  }));
 
   fs.createReadStream(row.path).pipe(res);
 }
@@ -562,16 +578,12 @@ async function handleBlobFetch(req: IncomingMessage, res: ServerResponse, auth: 
 const server = createServer(async (req, res) => {
   try {
     if (!req.url || !req.method) {
-      sendError(res, 400, 'SERVER_ERROR', 'Invalid request', false);
+      sendError(req, res, 400, 'SERVER_ERROR', 'Invalid request', false);
       return;
     }
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'access-control-allow-origin': '*',
-        'access-control-allow-methods': 'GET,POST,OPTIONS',
-        'access-control-allow-headers': 'authorization,content-type',
-      });
+      res.writeHead(204, withCorsHeaders(req, {}));
       res.end();
       return;
     }
@@ -585,7 +597,7 @@ const server = createServer(async (req, res) => {
 
     const auth = requireAuth(req);
     if (!auth) {
-      sendError(res, 401, 'AUTH', 'Missing or invalid token', true);
+      sendError(req, res, 401, 'AUTH', 'Missing or invalid token', true);
       return;
     }
 
@@ -610,13 +622,16 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    sendError(res, 404, 'SERVER_ERROR', `Route not found: ${req.method} ${requestUrl.pathname}`, false);
+    sendError(req, res, 404, 'SERVER_ERROR', `Route not found: ${req.method} ${requestUrl.pathname}`, false);
   } catch (error) {
-    sendError(res, 500, 'SERVER_ERROR', normalizeError(error), true);
+    sendError(req, res, 500, 'SERVER_ERROR', normalizeError(error), true);
   }
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`[sync-server] Listening on http://${HOST}:${PORT}`);
+  if (!process.env.HOST && process.env.NODE_ENV !== 'production') {
+    console.log('[sync-server] Dev default HOST=0.0.0.0 (set HOST to override, e.g. HOST=127.0.0.1)');
+  }
   console.log(`[sync-server] Data directory: ${DATA_DIR}`);
 });

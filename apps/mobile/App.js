@@ -6,14 +6,23 @@ function makeEventId() {
   return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function formatTimestamp(value) {
+  if (!value) {
+    return 'Never';
+  }
+  return new Date(value).toLocaleString();
+}
+
 export default function App() {
-  const [serverUrl, setServerUrl] = useState('http://127.0.0.1:8787');
+  const [screen, setScreen] = useState('inbox');
+  const [serverUrl, setServerUrl] = useState('');
   const [userId, setUserId] = useState('dev-user');
-  const [workspaceId, setWorkspaceId] = useState('workspace-1');
+  const [workspaceId, setWorkspaceId] = useState('workspace_mobile');
   const [token, setToken] = useState(null);
 
   const [events, setEvents] = useState([]);
   const [lastPulledSeq, setLastPulledSeq] = useState(0);
+  const [lastSyncAtMs, setLastSyncAtMs] = useState(undefined);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
   const [message, setMessage] = useState('');
@@ -31,11 +40,22 @@ export default function App() {
       }));
   }, [events]);
 
+  const pendingCount = useMemo(
+    () => events.filter((event) => typeof event.serverSeq !== 'number').length,
+    [events],
+  );
+
   async function signIn() {
     setError('');
     setMessage('');
+
     try {
-      const response = await fetch(`${serverUrl.replace(/\/+$/, '')}/auth/dev`, {
+      const baseUrl = serverUrl.trim().replace(/\/+$/, '');
+      if (!baseUrl) {
+        throw new Error('Server URL is required. Use your LAN IP for phone testing.');
+      }
+
+      const response = await fetch(`${baseUrl}/auth/dev`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ userId, workspaceId }),
@@ -51,8 +71,15 @@ export default function App() {
     }
   }
 
+  function signOut() {
+    setToken(null);
+    setMessage('Signed out. Local capture still works.');
+    setError('');
+  }
+
   function capture() {
     if (!noteBody.trim()) return;
+
     const atomId = `atom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     setEvents((prev) => [
       {
@@ -71,6 +98,7 @@ export default function App() {
       },
       ...prev,
     ]);
+
     setNoteTitle('');
     setNoteBody('');
     setMessage('Saved locally.');
@@ -78,14 +106,23 @@ export default function App() {
   }
 
   async function syncNow() {
-    if (!token) return;
     setError('');
     setMessage('');
 
+    if (!token) {
+      setError('Sync is off. Sign in from Settings to enable sync.');
+      return;
+    }
+
     try {
+      const baseUrl = serverUrl.trim().replace(/\/+$/, '');
+      if (!baseUrl) {
+        throw new Error('Server URL is required');
+      }
+
       const pending = events.filter((event) => typeof event.serverSeq !== 'number');
       if (pending.length > 0) {
-        const pushResponse = await fetch(`${serverUrl.replace(/\/+$/, '')}/sync/push`, {
+        const pushResponse = await fetch(`${baseUrl}/sync/push`, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${token}`,
@@ -113,7 +150,7 @@ export default function App() {
         )));
       }
 
-      const pullResponse = await fetch(`${serverUrl.replace(/\/+$/, '')}/sync/pull?cursor=${lastPulledSeq}`, {
+      const pullResponse = await fetch(`${baseUrl}/sync/pull?cursor=${lastPulledSeq}`, {
         method: 'GET',
         headers: {
           authorization: `Bearer ${token}`,
@@ -136,6 +173,7 @@ export default function App() {
       }
 
       setLastPulledSeq(Math.max(lastPulledSeq, pullPayload.cursor || 0));
+      setLastSyncAtMs(Date.now());
       setMessage('Sync complete.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
@@ -147,41 +185,76 @@ export default function App() {
       <StatusBar style="dark" />
       <Text style={{ fontSize: 24, fontWeight: '700' }}>SeedWorld Mobile</Text>
 
-      <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>Sign in (Dev Auth)</Text>
-        <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={serverUrl} onChangeText={setServerUrl} placeholder="Server URL" />
-        <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={userId} onChangeText={setUserId} placeholder="User ID" />
-        <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={workspaceId} onChangeText={setWorkspaceId} placeholder="Workspace ID" />
-        <Button title={token ? 'Signed in' : 'Sign in'} onPress={signIn} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button title="Inbox" onPress={() => setScreen('inbox')} />
+        <Button title="Settings" onPress={() => setScreen('settings')} />
       </View>
 
-      <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>Quick Capture</Text>
-        <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={noteTitle} onChangeText={setNoteTitle} placeholder="Title (optional)" />
-        <TextInput
-          style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, minHeight: 80 }}
-          value={noteBody}
-          onChangeText={setNoteBody}
-          placeholder="Capture text"
-          multiline
-        />
-        <Button title="Save Locally" onPress={capture} />
-        <Button title="Sync now" onPress={syncNow} disabled={!token} />
-      </View>
+      {screen === 'inbox' ? (
+        <>
+          <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Quick Capture</Text>
+            <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={noteTitle} onChangeText={setNoteTitle} placeholder="Title (optional)" />
+            <TextInput
+              style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, minHeight: 80 }}
+              value={noteBody}
+              onChangeText={setNoteBody}
+              placeholder="Capture text"
+              multiline
+            />
+            <Button title="Save Locally" onPress={capture} />
+          </View>
+
+          <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Sync</Text>
+            <Text>
+              Last success: {formatTimestamp(lastSyncAtMs)} · Pending: {pendingCount}
+            </Text>
+            {!token ? <Text>Sync is off (sign in from Settings).</Text> : null}
+            <Button title="Open Settings" onPress={() => setScreen('settings')} />
+          </View>
+
+          <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Inbox ({inbox.length})</Text>
+            {inbox.map((item) => (
+              <View key={item.id} style={{ borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8 }}>
+                <Text style={{ fontWeight: '600' }}>{item.title}</Text>
+                <Text style={{ fontSize: 12, color: '#555' }}>{item.id} · {item.syncStatus}</Text>
+                <Text>{item.preview}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Account & Sync (Dev Auth)</Text>
+            <TextInput
+              style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }}
+              value={serverUrl}
+              onChangeText={setServerUrl}
+              placeholder="http://<LAN-IP>:8787"
+            />
+            <Text style={{ fontSize: 12, color: '#444' }}>Use your computer LAN IP for phone testing.</Text>
+            <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={userId} onChangeText={setUserId} placeholder="User ID" />
+            <TextInput style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8 }} value={workspaceId} onChangeText={setWorkspaceId} placeholder="Workspace ID" />
+            <Button title={token ? 'Signed in' : 'Dev Sign In'} onPress={signIn} />
+            <Button title="Sign out" onPress={signOut} disabled={!token} />
+            <Button title="Sync now" onPress={syncNow} disabled={!token} />
+          </View>
+
+          <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
+            <Text style={{ fontSize: 18, fontWeight: '600' }}>Diagnostics</Text>
+            <Text>Diagnostics bundle export is a stub on mobile MVP.</Text>
+            <Text>Last success: {formatTimestamp(lastSyncAtMs)}</Text>
+            <Text>Last pulled seq: {lastPulledSeq}</Text>
+            <Text>Pending events: {pendingCount}</Text>
+          </View>
+        </>
+      )}
 
       {message ? <Text style={{ color: '#0a7f35' }}>{message}</Text> : null}
       {error ? <Text style={{ color: '#b00020' }}>{error}</Text> : null}
-
-      <View style={{ gap: 8, borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8 }}>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>Inbox ({inbox.length})</Text>
-        {inbox.map((item) => (
-          <View key={item.id} style={{ borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8 }}>
-            <Text style={{ fontWeight: '600' }}>{item.title}</Text>
-            <Text style={{ fontSize: 12, color: '#555' }}>{item.id} · {item.syncStatus}</Text>
-            <Text>{item.preview}</Text>
-          </View>
-        ))}
-      </View>
     </ScrollView>
   );
 }

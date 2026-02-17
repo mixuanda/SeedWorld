@@ -36,7 +36,13 @@ npm run make
 
 ## Sync Server Notes
 
-Default server URL: `http://127.0.0.1:8787`
+Default server URL: `http://localhost:8787`
+
+For LAN/phone testing, start with:
+
+```bash
+HOST=0.0.0.0 PORT=8787 npm run dev:server
+```
 
 The server stores:
 
@@ -45,16 +51,22 @@ The server stores:
 
 ## Local Multi-Device Sync Test
 
-1. Start server: `npm run dev:server`
+1. Start server for LAN testing:
+   - `HOST=0.0.0.0 PORT=8787 npm run dev:server`
 2. Launch desktop and web (or mobile):
    - `npm run dev:desktop`
    - `npm run dev:web`
-3. In each client sign in with:
+   - `npm run dev:mobile`
+3. On phone (same LAN as dev machine):
+   - open `http://<your-computer-LAN-IP>:5260`
+   - in Web Settings, set `serverUrl` to `http://<your-computer-LAN-IP>:8787`
+4. In each client sign in with:
    - same `workspaceId`
    - different `deviceId` (desktop auto-generated; web/mobile independent)
-4. Create captures offline on each client.
-5. Reconnect network and press **Sync now**.
-6. Verify both clients converge to the same Inbox count with no duplicates.
+5. Capture while signed out to confirm local-only mode (capture must still succeed).
+6. Create additional captures offline on each client.
+7. Reconnect network and press **Sync now**.
+8. Verify all clients converge to the same Inbox count with no duplicates.
 
 ## Import/Restore
 
@@ -96,6 +108,7 @@ Desktop provides:
 ## Acceptance Checklist (Phone-friendly)
 
 - [ ] Capture in Web/Mobile shows immediately as saved locally.
+- [ ] Capture works while signed out (local mode), with no auth prompt blocking capture.
 - [ ] Turn on airplane mode (or disable network), capture still succeeds.
 - [ ] Re-enable network and press **Sync now**; capture appears on Desktop.
 - [ ] Run concurrent edits on one atom from two clients; conflict is preserved as needs-resolution.

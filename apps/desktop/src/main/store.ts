@@ -9,6 +9,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { app } from 'electron';
 import type { ProviderConfig } from './ai-provider';
 
@@ -20,6 +21,7 @@ interface StoreData {
     vaultPath: string | null;
     aiConfig: ProviderConfig | null;
     syncConfig?: SyncConfig | null;
+    localWorkspace?: LocalWorkspace;
     whisperManifestUrl?: string;
 }
 
@@ -33,6 +35,12 @@ export interface SyncConfig {
     importMode?: 'restore' | 'clone';
 }
 
+export interface LocalWorkspace {
+    localWorkspaceId: string;
+    localDeviceId: string;
+    localUserId: string;
+}
+
 const STORE_FILENAME = 'world-seed-settings.json';
 
 // ============================================================================
@@ -43,19 +51,48 @@ function getStorePath(): string {
     return path.join(app.getPath('userData'), STORE_FILENAME);
 }
 
+function generateLocalId(prefix: string): string {
+    return `${prefix}_${randomBytes(8).toString('hex')}`;
+}
+
+function ensureLocalWorkspace(data: StoreData): LocalWorkspace {
+    if (data.localWorkspace?.localWorkspaceId && data.localWorkspace.localDeviceId && data.localWorkspace.localUserId) {
+        return data.localWorkspace;
+    }
+
+    const localWorkspace: LocalWorkspace = {
+        localWorkspaceId: generateLocalId('workspace'),
+        localDeviceId: generateLocalId('desktop'),
+        localUserId: 'local-user',
+    };
+
+    data.localWorkspace = localWorkspace;
+    return localWorkspace;
+}
+
 function loadStore(): StoreData {
     const storePath = getStorePath();
 
     try {
         if (fs.existsSync(storePath)) {
             const data = fs.readFileSync(storePath, 'utf-8');
-            return JSON.parse(data) as StoreData;
+            const parsed = JSON.parse(data) as StoreData;
+            ensureLocalWorkspace(parsed);
+            return parsed;
         }
     } catch (error) {
         console.error('[store] Failed to load store:', error);
     }
 
-    return { vaultPath: null, aiConfig: null };
+    return {
+        vaultPath: null,
+        aiConfig: null,
+        localWorkspace: {
+            localWorkspaceId: generateLocalId('workspace'),
+            localDeviceId: generateLocalId('desktop'),
+            localUserId: 'local-user',
+        },
+    };
 }
 
 function saveStore(data: StoreData): void {
@@ -174,4 +211,27 @@ export function clearSyncConfig(): void {
     const data = loadStore();
     data.syncConfig = null;
     saveStore(data);
+}
+
+// ============================================================================
+// Local Workspace Identity
+// ============================================================================
+
+export function getLocalWorkspace(): LocalWorkspace {
+    const data = loadStore();
+    const localWorkspace = ensureLocalWorkspace(data);
+    saveStore(data);
+    return localWorkspace;
+}
+
+export function setLocalWorkspace(localWorkspace: Partial<LocalWorkspace>): LocalWorkspace {
+    const data = loadStore();
+    const existing = ensureLocalWorkspace(data);
+    data.localWorkspace = {
+        localWorkspaceId: localWorkspace.localWorkspaceId || existing.localWorkspaceId,
+        localDeviceId: localWorkspace.localDeviceId || existing.localDeviceId,
+        localUserId: localWorkspace.localUserId || existing.localUserId,
+    };
+    saveStore(data);
+    return data.localWorkspace;
 }
