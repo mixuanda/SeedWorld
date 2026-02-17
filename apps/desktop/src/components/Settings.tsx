@@ -9,13 +9,14 @@ import type {
 
 interface SettingsProps {
     onClose: () => void;
+    embedded?: boolean;
 }
 
 /**
  * Settings panel for AI provider configuration
  * Focuses on local-first AI (OpenAI-compatible endpoints)
  */
-export function Settings({ onClose }: SettingsProps): React.ReactElement {
+export function Settings({ onClose, embedded = false }: SettingsProps): React.ReactElement {
     // Form state
     const [mode, setMode] = useState<'local' | 'online'>('local');
     const [baseUrl, setBaseUrl] = useState('http://localhost:1234/v1');
@@ -206,9 +207,8 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
         return arch ? `${platform} / ${arch}` : platform;
     };
 
-    return (
-        <div className="settings-overlay" onClick={onClose}>
-            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+    const panel = (
+        <div className={`settings-panel ${embedded ? 'embedded' : ''}`} onClick={(e) => e.stopPropagation()}>
                 <header className="settings-header">
                     <h2>⚙️ AI Settings</h2>
                     <button className="settings-close" onClick={onClose}>×</button>
@@ -424,6 +424,15 @@ export function Settings({ onClose }: SettingsProps): React.ReactElement {
                     </button>
                 </footer>
             </div>
+    );
+
+    if (embedded) {
+        return <div className="settings-embedded">{panel}</div>;
+    }
+
+    return (
+        <div className="settings-overlay" onClick={onClose}>
+            {panel}
         </div>
     );
 }

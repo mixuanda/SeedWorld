@@ -33,6 +33,17 @@ export interface NoteIndexEntry {
     updatedAt: string;
 }
 
+export interface VaultSyncHealthReport {
+    mode: 'local_folder';
+    status: 'ok' | 'warning';
+    vaultPath: string;
+    looksLikeCloudFolder: boolean;
+    detectedProviders: string[];
+    conflictFiles: string[];
+    scannedFiles: number;
+    recommendations: string[];
+}
+
 // --- AI Provider Types ---
 
 export type ProviderMode = 'local' | 'online';
@@ -72,6 +83,7 @@ export interface VaultAPI {
     getNote: (id: string) => Promise<Note | null>;
     deleteNote: (id: string) => Promise<boolean>;
     rebuildIndex: () => Promise<NoteIndex | null>;
+    syncHealthCheck: () => Promise<VaultSyncHealthReport>;
 }
 
 export interface AIAPI {
@@ -264,6 +276,9 @@ contextBridge.exposeInMainWorld('api', {
 
         rebuildIndex: (): Promise<NoteIndex | null> =>
             ipcRenderer.invoke('vault:rebuildIndex'),
+
+        syncHealthCheck: (): Promise<VaultSyncHealthReport> =>
+            ipcRenderer.invoke('vault:syncHealthCheck'),
     },
 
     auth: {

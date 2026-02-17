@@ -43,6 +43,17 @@ export interface NoteIndexEntry {
     updatedAt: string;
 }
 
+export interface VaultSyncHealthReport {
+    mode: 'local_folder';
+    status: 'ok' | 'warning';
+    vaultPath: string;
+    looksLikeCloudFolder: boolean;
+    detectedProviders: string[];
+    conflictFiles: string[];
+    scannedFiles: number;
+    recommendations: string[];
+}
+
 // ============================================================================
 // Vault Directory Structure
 // ============================================================================
@@ -626,4 +637,114 @@ export function cleanupTempFiles(vaultPath: string): number {
     }
 
     return cleaned;
+}
+
+// ============================================================================
+// Local Sync Health Check (Cloud-folder heuristic only)
+// ============================================================================
+
+const CLOUD_PROVIDER_KEYWORDS: Array<{ provider: string; keyword: string }> = [
+    { provider: 'OneDrive', keyword: 'onedrive' },
+    { provider: 'iCloud', keyword: 'icloud' },
+    { provider: 'Dropbox', keyword: 'dropbox' },
+    { provider: 'Syncthing', keyword: 'syncthing' },
+    { provider: 'Google Drive', keyword: 'google drive' },
+    { provider: 'Google Drive', keyword: 'drivefs' },
+];
+
+function detectCloudProvidersFromPath(vaultPath: string): string[] {
+    const normalized = vaultPath.toLowerCase();
+    const providers = new Set<string>();
+
+    for (const entry of CLOUD_PROVIDER_KEYWORDS) {
+        if (normalized.includes(entry.keyword)) {
+            providers.add(entry.provider);
+        }
+    }
+
+    return Array.from(providers);
+}
+
+function isConflictLikeFilename(filename: string): boolean {
+    const lower = filename.toLowerCase();
+    if (lower.includes('conflicted copy') || lower.includes('conflict')) {
+        return true;
+    }
+
+    // Common duplicate suffix pattern from file-sync providers: "name (1).md"
+    return /\(\d+\)(\.[^.]+)?$/i.test(filename);
+}
+
+export function checkVaultSyncHealth(vaultPath: string): VaultSyncHealthReport {
+    ensureVaultStructure(vaultPath);
+
+    const detectedProviders = detectCloudProvidersFromPath(vaultPath);
+    const looksLikeCloudFolder = detectedProviders.length > 0;
+
+    const conflictFiles: string[] = [];
+    const maxConflictSamples = 50;
+    const maxScannedEntries = 8000;
+    let scannedFiles = 0;
+
+    const stack: string[] = [vaultPath];
+    while (stack.length > 0 && scannedFiles < maxScannedEntries) {
+        const currentDir = stack.pop() as string;
+        let entries: fs.Dirent[] = [];
+        try {
+            entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+
+        for (const entry of entries) {
+            if (entry.name === '.seedworld') {
+                continue;
+            }
+
+            const fullPath = path.join(currentDir, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(fullPath);
+                continue;
+            }
+
+            if (!entry.isFile()) {
+                continue;
+            }
+
+            scannedFiles += 1;
+            if (isConflictLikeFilename(entry.name) && conflictFiles.length < maxConflictSamples) {
+                conflictFiles.push(path.relative(vaultPath, fullPath));
+            }
+
+            if (scannedFiles >= maxScannedEntries) {
+                break;
+            }
+        }
+    }
+
+    const recommendations: string[] = [];
+    if (!looksLikeCloudFolder) {
+        recommendations.push(
+            'Move your vault into a OneDrive, iCloud, Dropbox, or Syncthing folder if you want provider-managed multi-device sync.',
+        );
+    }
+
+    if (conflictFiles.length > 0) {
+        recommendations.push('Resolve conflict-copy files, then run Rebuild Index to refresh listings.');
+    }
+
+    if (recommendations.length === 0) {
+        recommendations.push('Vault path looks healthy. Keep provider sync app running and use Refresh after external changes.');
+    }
+
+    return {
+        mode: 'local_folder',
+        status: !looksLikeCloudFolder || conflictFiles.length > 0 ? 'warning' : 'ok',
+        vaultPath,
+        looksLikeCloudFolder,
+        detectedProviders,
+        conflictFiles,
+        scannedFiles,
+        recommendations,
+    };
 }

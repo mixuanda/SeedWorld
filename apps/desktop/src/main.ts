@@ -25,12 +25,14 @@ import {
   loadAllNotes,
   deleteNote,
   rebuildIndex,
+  checkVaultSyncHealth,
   cleanupTempFiles,
   saveVoiceNote,
   type Note,
   type NoteInput,
   type VoiceNote,
   type VoiceNoteInput,
+  type VaultSyncHealthReport,
 } from './main/vault';
 import {
   testConnection,
@@ -246,6 +248,15 @@ ipcMain.handle('vault:rebuildIndex', () => {
   }
 
   return rebuildIndex(vaultPath);
+});
+
+ipcMain.handle('vault:syncHealthCheck', (): VaultSyncHealthReport => {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    throw new Error('No vault configured');
+  }
+
+  return checkVaultSyncHealth(vaultPath);
 });
 
 // --- Sync/Auth Operations ---

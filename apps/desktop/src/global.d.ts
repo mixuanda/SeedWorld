@@ -5,6 +5,7 @@ export type {
   NoteInput,
   NoteIndex,
   NoteIndexEntry,
+  VaultSyncHealthReport,
   VoiceNote,
   ProviderMode,
   LocalProviderConfig,

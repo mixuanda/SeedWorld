@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'codex/**'
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Desktop build check
+        run: |
+          if node -e "const scripts=require('./apps/desktop/package.json').scripts||{}; process.exit(scripts.build ? 0 : 1)"; then
+            npm run build --workspace @seedworld/desktop
+          else
+            npx tsc -p apps/desktop/tsconfig.json --noEmit
+          fi
