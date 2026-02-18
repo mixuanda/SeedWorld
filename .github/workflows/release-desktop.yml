@@ -8,15 +8,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build-and-release:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-
-    runs-on: ${{ matrix.os }}
-
+  build-macos:
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,33 +28,92 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # Build desktop artifacts
       - name: Build desktop (electron-forge make)
         run: npm run make --workspace @seedworld/desktop
 
-      # Debug: print artifact tree
-      - name: Print forge output tree
+      - name: Collect macOS artifacts
         shell: bash
         run: |
-          echo "=== repo tree (partial) ==="
-          ls -la
-          echo "=== apps/desktop/out ==="
-          ls -la apps/desktop/out || true
-          echo "=== apps/desktop/out/make (recursive) ==="
-          ls -R apps/desktop/out/make || true
-          echo "=== apps/desktop/out (recursive) ==="
-          ls -R apps/desktop/out || true
+          set -euo pipefail
+          mkdir -p release-assets/macos
+          find apps/desktop/out/make -type f -name "*.dmg" -exec cp {} release-assets/macos/ \;
+          ls -la release-assets/macos
+          compgen -G "release-assets/macos/*.dmg" > /dev/null || { echo "No DMG produced"; exit 1; }
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-macos
+          path: release-assets/macos/*
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build desktop (electron-forge make)
+        run: npm run make --workspace @seedworld/desktop
+
+      - name: Collect Windows artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets/windows -Force | Out-Null
+          Get-ChildItem -Path apps/desktop/out/make -Recurse -File -Filter *.zip |
+            ForEach-Object { Copy-Item -Path $_.FullName -Destination release-assets/windows }
+          Get-ChildItem -Path release-assets/windows -File | Format-Table -AutoSize
+          if (-not (Get-ChildItem -Path release-assets/windows -File -Filter *.zip)) {
+            throw "No Windows portable ZIP produced"
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-windows
+          path: release-assets/windows/*
+          if-no-files-found: error
+
+  publish:
+    runs-on: ubuntu-latest
+    needs:
+      - build-macos
+      - build-windows
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-macos
+          path: release-assets/macos
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-windows
+          path: release-assets/windows
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag'
         with:
           prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
-            apps/desktop/out/make/**/*.dmg
-            apps/desktop/out/make/**/*.zip
-            apps/desktop/out/make/**/*.exe
-            apps/desktop/out/**/*.dmg
-            apps/desktop/out/**/*.zip
-            apps/desktop/out/**/*.exe
+            release-assets/**/*
+            SHA256SUMS.txt
