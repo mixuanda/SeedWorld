@@ -17,5 +17,9 @@
     "package": "npm run package --workspace @seedworld/desktop",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-import-resolver-typescript": "3.5.5"
   }
 }

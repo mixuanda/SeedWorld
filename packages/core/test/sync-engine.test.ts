@@ -13,7 +13,7 @@ import {
   SyncEngine,
   buildProjection,
   generateEventId,
-} from '../src/index.js';
+} from '../src/index';
 
 class InMemorySyncServer {
   private nextSeq = new Map<string, number>();

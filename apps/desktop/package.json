@@ -31,6 +31,7 @@
     "electron": "40.0.0",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-import-resolver-typescript": "3.5.5",
     "png-to-ico": "^3.0.1",
     "typescript": "^5.7.3",
     "vite": "^5.4.21"

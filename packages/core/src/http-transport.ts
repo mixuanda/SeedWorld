@@ -4,7 +4,7 @@ import {
   type PushRequest,
   type PushResponse,
   type SyncTransport,
-} from './types.js';
+} from './types';
 
 export interface HttpTransportOptions {
   baseUrl: string;

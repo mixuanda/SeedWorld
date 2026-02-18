@@ -492,7 +492,7 @@ export function atomicWriteBinarySync(filePath: string, data: Buffer): void {
  * Save audio file to vault (atomic binary write)
  * @returns The relative path within the vault (e.g., "attachments/audio/a_abc123.webm")
  */
-export function saveAudio(vaultPath: string, audioId: string, audioData: Buffer, extension: string = 'webm'): string {
+export function saveAudio(vaultPath: string, audioId: string, audioData: Buffer, extension = 'webm'): string {
     ensureVaultStructure(vaultPath);
     const relativePath = path.join(VAULT_DIRS.attachmentsAudio, `${audioId}.${extension}`);
     const fullPath = path.join(vaultPath, relativePath);
@@ -504,14 +504,14 @@ export function saveAudio(vaultPath: string, audioId: string, audioData: Buffer,
 /**
  * Get full path to an audio file
  */
-export function getAudioPath(vaultPath: string, audioId: string, extension: string = 'webm'): string {
+export function getAudioPath(vaultPath: string, audioId: string, extension = 'webm'): string {
     return path.join(vaultPath, VAULT_DIRS.attachmentsAudio, `${audioId}.${extension}`);
 }
 
 /**
  * Check if audio file exists
  */
-export function audioExists(vaultPath: string, audioId: string, extension: string = 'webm'): boolean {
+export function audioExists(vaultPath: string, audioId: string, extension = 'webm'): boolean {
     const filePath = getAudioPath(vaultPath, audioId, extension);
     return fs.existsSync(filePath);
 }

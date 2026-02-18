@@ -1,6 +1,6 @@
-import { createEvent, withStoredMetadata } from './events.js';
-import { migrateEvent } from './migrations.js';
-import { buildProjection } from './projection.js';
+import { createEvent, withStoredMetadata } from './events';
+import { migrateEvent } from './migrations';
+import { buildProjection } from './projection';
 import {
   type DeviceState,
   type Event,
@@ -12,7 +12,7 @@ import {
   type SyncErrorCode,
   type SyncStatus,
   type SyncTransport,
-} from './types.js';
+} from './types';
 
 function mapErrorCode(error: unknown): SyncErrorCode {
   if (!(error instanceof Error)) {

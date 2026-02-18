@@ -6,7 +6,7 @@ import {
   type EventDraft,
   type EventType,
   type StoredEvent,
-} from './types.js';
+} from './types';
 
 export function generateEventId(): string {
   try {

@@ -7,7 +7,7 @@ import {
   type ProjectionSnapshot,
   type StoredEvent,
   type SyncItemStatus,
-} from './types.js';
+} from './types';
 
 interface WorkingAtom {
   atomId: string;

@@ -3,7 +3,7 @@ import {
   MIN_SUPPORTED_EVENT_SCHEMA_VERSION,
   type Event,
   type EventType,
-} from './types.js';
+} from './types';
 
 function isEventType(value: unknown): value is EventType {
   return (

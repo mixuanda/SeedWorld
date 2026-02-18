@@ -296,7 +296,7 @@ async function downloadToFile(
     destinationPath: string,
     onProgress?: (progress: WhisperProgress) => void,
     options?: { message?: string; totalBytes?: number | null },
-    redirectCount: number = 0,
+    redirectCount = 0,
 ): Promise<DownloadResult> {
     return new Promise((resolve, reject) => {
         const parsed = new URL(url);

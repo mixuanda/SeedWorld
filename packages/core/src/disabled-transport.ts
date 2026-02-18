@@ -4,7 +4,7 @@ import type {
   PushRequest,
   PushResponse,
   SyncTransport,
-} from './types.js';
+} from './types';
 
 const DEFAULT_MESSAGE = 'AUTH: Sign in required for sync';
 

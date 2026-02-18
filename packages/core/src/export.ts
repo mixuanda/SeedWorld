@@ -5,8 +5,8 @@ import {
   type ImportBundle,
   type ProjectionSnapshot,
   type StorageAdapter,
-} from './types.js';
-import { migrateEvent } from './migrations.js';
+} from './types';
+import { migrateEvent } from './migrations';
 
 export async function buildExportSnapshot(
   storage: StorageAdapter,
