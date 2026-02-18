@@ -28,6 +28,31 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Set package versions from tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Using release version: ${VERSION}"
+
+          ROOT_OK=true
+          WORKSPACE_OK=true
+
+          # Try npm version first; if either update fails in CI, fallback to direct JSON update.
+          if ! npm version "${VERSION}" --no-git-tag-version --allow-same-version; then
+            ROOT_OK=false
+          fi
+          if ! npm version "${VERSION}" --no-git-tag-version --allow-same-version -w @seedworld/desktop; then
+            WORKSPACE_OK=false
+          fi
+
+          if [ "${ROOT_OK}" != "true" ] || [ "${WORKSPACE_OK}" != "true" ]; then
+            echo "npm version failed for root or workspace, using fallback updater"
+            node -e 'const fs=require("fs");const p=["package.json","apps/desktop/package.json"];const v=process.argv[1];for(const f of p){const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version=v;fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n");}' "${VERSION}"
+          fi
+
+          node -e 'const root=require("./package.json");const desktop=require("./apps/desktop/package.json");console.log("root version:",root.version);console.log("desktop version:",desktop.version);'
+
       - name: Build desktop (electron-forge make)
         run: npm run make --workspace @seedworld/desktop
 
@@ -61,6 +86,31 @@ jobs:
 
       - name: Install deps
         run: npm ci
+
+      - name: Set package versions from tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Using release version: ${VERSION}"
+
+          ROOT_OK=true
+          WORKSPACE_OK=true
+
+          # Try npm version first; if either update fails in CI, fallback to direct JSON update.
+          if ! npm version "${VERSION}" --no-git-tag-version --allow-same-version; then
+            ROOT_OK=false
+          fi
+          if ! npm version "${VERSION}" --no-git-tag-version --allow-same-version -w @seedworld/desktop; then
+            WORKSPACE_OK=false
+          fi
+
+          if [ "${ROOT_OK}" != "true" ] || [ "${WORKSPACE_OK}" != "true" ]; then
+            echo "npm version failed for root or workspace, using fallback updater"
+            node -e 'const fs=require("fs");const p=["package.json","apps/desktop/package.json"];const v=process.argv[1];for(const f of p){const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version=v;fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n");}' "${VERSION}"
+          fi
+
+          node -e 'const root=require("./package.json");const desktop=require("./apps/desktop/package.json");console.log("root version:",root.version);console.log("desktop version:",desktop.version);'
 
       - name: Build desktop (electron-forge make)
         run: npm run make --workspace @seedworld/desktop
