@@ -1,0 +1,192 @@
+{
+  "sidebar": {
+    "quickCapture": "快速擷取",
+    "pastNotes": "過往筆記",
+    "organize": "整理",
+    "voiceAi": "語音與 AI",
+    "settings": "設定"
+  },
+  "app": {
+    "title": "SeedWorld",
+    "ipcOk": "IPC 正常",
+    "vaultReady": "Vault 已就緒",
+    "loading": "正在載入 SeedWorld..."
+  },
+  "common": {
+    "refresh": "重新整理",
+    "rebuildIndex": "重建索引",
+    "never": "從未"
+  },
+  "quickCapture": {
+    "title": "快速擷取",
+    "subtitle": "快速記下想法，永不阻塞本地儲存。",
+    "optionalTitle": "標題（可選）",
+    "placeholder": "輸入你的內容...",
+    "save": "儲存",
+    "saving": "儲存中...",
+    "shortcut": "Cmd/Ctrl + Enter 儲存",
+    "focusShortcut": "Cmd/Ctrl + L 聚焦輸入框",
+    "voiceTitle": "用語音記下想法",
+    "recent": "最近",
+    "noRecent": "尚無筆記。",
+    "savedToast": "已儲存，可繼續下一則。",
+    "voiceSavedToast": "語音筆記已儲存。"
+  },
+  "history": {
+    "title": "過往筆記",
+    "searchPlaceholder": "搜尋標題或內容",
+    "loadedToast": "已載入 {{count}} 筆筆記。",
+    "indexRebuiltToast": "索引已重建（{{count}} 筆）。",
+    "indexRebuiltFallbackToast": "索引已重建。",
+    "noteDeletedToast": "筆記已刪除。"
+  },
+  "organize": {
+    "title": "整理（即將推出）",
+    "searchPlaceholder": "搜尋所有筆記",
+    "matchingNotes": "符合的筆記",
+    "noMatches": "沒有符合的筆記。",
+    "suggestedActions": "建議下一步",
+    "action1": "依專案與時間為擷取內容加標籤。",
+    "action2": "每週檢視前先連結相關筆記。",
+    "action3": "將重複出現的想法整理成固定文件。",
+    "action4": "建立每週五的收件匣整理流程。"
+  },
+  "voiceAi": {
+    "title": "語音與 AI"
+  },
+  "settings": {
+    "title": "設定",
+    "tabs": {
+      "storage": "儲存",
+      "data": "資料",
+      "appearance": "外觀",
+      "voiceAi": "語音與 AI",
+      "experimental": "實驗功能"
+    },
+    "storage": {
+      "title": "儲存與同步",
+      "description": "SeedWorld 會將資料寫入本地 Vault 資料夾；雲端同步由你的資料夾服務管理。",
+      "localGuidance": "將此 Vault 放在 OneDrive、iCloud Drive、Dropbox 或 Syncthing 資料夾中即可跨裝置同步。",
+      "modes": {
+        "local": {
+          "title": "本地資料夾",
+          "meta": "可用 · 推薦"
+        },
+        "cloud": {
+          "title": "雲端供應商同步",
+          "meta": "即將推出"
+        },
+        "selfHosted": {
+          "title": "自架同步伺服器",
+          "meta": "實驗功能"
+        }
+      },
+      "copyPath": "複製路徑",
+      "vaultMissing": "尚未設定 Vault",
+      "reselectFolder": "重新選擇資料夾",
+      "copyPathToast": "Vault 路徑已複製。",
+      "syncHealth": {
+        "title": "同步健康檢查",
+        "run": "執行健康檢查",
+        "running": "檢查中...",
+        "statusOk": "正常",
+        "statusWarning": "警告",
+        "heuristicDetected": "雲端資料夾偵測：已偵測",
+        "heuristicNotDetected": "雲端資料夾偵測：未偵測",
+        "conflictFiles": "衝突副本檔案數：{{count}}",
+        "recommendations": "建議"
+      },
+      "healthOkToast": "同步健康檢查：正常。",
+      "healthWarningToast": "同步健康檢查：發現警告。",
+      "cloudModeHint": "內建雲端供應商整合功能稍後提供。現在請使用本地資料夾模式搭配你的同步客戶端。",
+      "selfHostedHint": "自架同步為選用實驗功能。若要設定，請先啟用實驗功能。"
+    },
+    "data": {
+      "title": "資料",
+      "description": "匯入、匯出與診斷工具。",
+      "exportZip": "匯出 ZIP",
+      "importMode": "匯入模式",
+      "restoreMode": "還原（保留 workspaceId）",
+      "cloneMode": "複製（新 workspaceId）",
+      "importRestoreZip": "匯入/還原 ZIP",
+      "importing": "匯入中...",
+      "copyDiagnostics": "複製診斷摘要",
+      "exportDiagnostics": "匯出診斷 ZIP",
+      "exportToast": "匯出完成：{{path}}",
+      "importToast": "匯入完成（{{count}} 筆事件）。",
+      "copyDiagnosticsToast": "診斷摘要已複製。",
+      "exportDiagnosticsToast": "診斷資料已匯出：{{path}}"
+    },
+    "appearance": {
+      "title": "外觀",
+      "description": "設定主題與語言。",
+      "themeLabel": "主題",
+      "themeSystem": "跟隨系統",
+      "themeDark": "深色",
+      "themeLight": "淺色",
+      "languageLabel": "語言",
+      "languageEnglish": "English",
+      "languageTraditionalChinese": "繁體中文",
+      "experimentalToggle": "啟用實驗功能"
+    },
+    "voiceAi": {
+      "title": "語音與 AI",
+      "description": "在語音與 AI 頁面設定 Whisper 與 AI 供應商。",
+      "open": "前往語音與 AI"
+    },
+    "experimental": {
+      "summary": "實驗功能：自架同步伺服器（一般使用不需要）",
+      "serverUrl": "伺服器 URL",
+      "userId": "使用者 ID",
+      "workspaceId": "Workspace ID",
+      "devSignIn": "開發登入",
+      "signingIn": "登入中...",
+      "signOut": "登出",
+      "syncNow": "立即同步",
+      "syncing": "同步中...",
+      "signInToast": "實驗同步登入成功。",
+      "signOutToast": "已登出實驗同步。",
+      "syncToast": "實驗同步完成。",
+      "statusPrefix": "狀態"
+    }
+  },
+  "sync": {
+    "lastSuccess": "上次成功：{{value}}",
+    "pendingEvents": "待同步事件：{{count}}",
+    "pendingBlobs": "待同步 Blob：{{count}}",
+    "cursor": "游標：pull={{pulled}} applied={{applied}}",
+    "lastError": "最後錯誤：{{message}}（{{code}}）",
+    "lastErrorNone": "最後錯誤：無",
+    "noStatus": "尚無同步狀態。"
+  },
+  "vaultSetup": {
+    "title": "歡迎使用 SeedWorld",
+    "description": "請選擇本地 Vault 的儲存位置。若放在 OneDrive、iCloud Drive、Dropbox 或 Syncthing 資料夾，即可跨裝置同步。",
+    "featurePlainFiles": "筆記以純 Markdown 檔案儲存",
+    "featureCloudSync": "同步由你的雲端資料夾服務管理",
+    "featureDataControl": "資料由你自行掌控",
+    "selectFolder": "選擇 Vault 資料夾",
+    "createVault": "建立新 Vault",
+    "selecting": "選擇中...",
+    "selectError": "選擇資料夾失敗",
+    "tip": "提示：可建立如 OneDrive/SeedWorld 或 iCloud Drive/SeedWorld 的資料夾"
+  },
+  "errors": {
+    "initializationFailed": "初始化失敗",
+    "saveFailed": "儲存筆記失敗",
+    "refreshFailed": "重新整理失敗",
+    "rebuildFailed": "重建索引失敗",
+    "deleteFailed": "刪除筆記失敗",
+    "changeVaultFailed": "變更 Vault 資料夾失敗",
+    "exportFailed": "匯出失敗",
+    "importFailed": "匯入失敗",
+    "copyDiagnosticsFailed": "複製診斷摘要失敗",
+    "exportDiagnosticsFailed": "匯出診斷失敗",
+    "syncHealthFailed": "同步健康檢查失敗",
+    "devSignInFailed": "開發登入失敗",
+    "devSignOutFailed": "登出失敗",
+    "experimentalSyncFailed": "同步失敗",
+    "invalidDevServer": "開發登入需要伺服器 URL。",
+    "clipboardFailed": "複製到剪貼簿失敗"
+  }
+}

@@ -1,0 +1,98 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate app icons
+        run: npm run icons:generate --workspace @seedworld/desktop
+
+      - name: Build desktop artifacts
+        run: npm run make --workspace @seedworld/desktop
+
+      - name: Collect artifacts (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          find apps/desktop/out/make -type f \( -name "*.dmg" -o -name "*.zip" \) -exec cp {} release-artifacts/ \;
+          cd release-artifacts
+          find . -maxdepth 1 -type f \( -name "*.dmg" -o -name "*.zip" \) -print0 | \
+            xargs -0 shasum -a 256 > SHA256SUMS-${{ runner.os }}.txt
+
+      - name: Collect artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-artifacts -Force | Out-Null
+          Get-ChildItem -Path apps/desktop/out/make -Recurse -File |
+            Where-Object { $_.Extension -in '.zip', '.dmg' } |
+            ForEach-Object { Copy-Item -Path $_.FullName -Destination release-artifacts }
+
+          $hashLines = Get-ChildItem release-artifacts -File |
+            Where-Object { $_.Extension -in '.zip', '.dmg' } |
+            ForEach-Object {
+              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)"
+            }
+          Set-Content -Path "release-artifacts/SHA256SUMS-${{ runner.os }}.txt" -Value $hashLines
+
+      - name: Upload matrix artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: release-artifacts/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Build consolidated checksum file
+        run: |
+          cat artifacts/**/SHA256SUMS-*.txt > artifacts/SHA256SUMS.txt
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/SHA256SUMS.txt

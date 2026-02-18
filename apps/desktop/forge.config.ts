@@ -1,26 +1,47 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
+import fs from 'node:fs';
 import path from 'node:path';
-import { MakerSquirrel } from '@electron-forge/maker-squirrel';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { MakerDeb } from '@electron-forge/maker-deb';
-import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+function resolvePackagerIcon(): string | undefined {
+  const iconBasePath = path.resolve(__dirname, 'resources', 'icon');
+
+  if (process.platform === 'darwin') {
+    const icnsPath = `${iconBasePath}.icns`;
+    return fs.existsSync(icnsPath) ? icnsPath : undefined;
+  }
+
+  if (process.platform === 'win32') {
+    const icoPath = `${iconBasePath}.ico`;
+    return fs.existsSync(icoPath) ? icoPath : undefined;
+  }
+
+  return undefined;
+}
+
+const dmgMakerConfig = {
+  additionalDMGOptions: {
+    // appdmg supports `filesystem`, but the upstream type omits it.
+    filesystem: 'APFS',
+  },
+} as unknown as ConstructorParameters<typeof MakerDMG>[0];
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: resolvePackagerIcon(),
     extraResource: [
       path.resolve(__dirname, 'resources', 'addons'),
     ],
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
+    new MakerDMG(dmgMakerConfig, ['darwin']),
+    new MakerZIP({}, ['win32']),
   ],
   plugins: [
     new VitePlugin({

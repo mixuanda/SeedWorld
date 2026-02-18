@@ -7,7 +7,6 @@ import started from 'electron-squirrel-startup';
 import {
   getVaultPath,
   setVaultPath,
-  getAIConfig,
   setAIConfig,
   getAIConfigForRenderer,
   getSyncConfig,
@@ -15,7 +14,13 @@ import {
   clearSyncConfig,
   getLocalWorkspace,
   setLocalWorkspace,
+  getAppPreferences,
+  setThemeMode,
+  setAppLanguage,
+  setExperimentalFeaturesEnabled,
   type SyncConfig,
+  type ThemeMode,
+  type AppLanguage,
 } from './main/store';
 import {
   ensureVaultStructure,
@@ -39,7 +44,6 @@ import {
   validateConfig,
   getSafeConfigForLogging,
   type ProviderConfig,
-  type LocalProviderConfig,
 } from './main/ai-provider';
 import {
   ensureWhisperInstalled,
@@ -134,6 +138,30 @@ async function getOrInitSyncService(): Promise<DesktopSyncService> {
 ipcMain.handle('ping', () => {
   console.log('[main] Received ping, sending pong');
   return 'pong';
+});
+
+// --- App Preferences ---
+
+ipcMain.handle('preferences:get', () => {
+  return getAppPreferences();
+});
+
+ipcMain.handle('preferences:setThemeMode', (_event, themeMode: ThemeMode) => {
+  if (themeMode !== 'system' && themeMode !== 'dark' && themeMode !== 'light') {
+    throw new Error('Invalid theme mode');
+  }
+  return setThemeMode(themeMode);
+});
+
+ipcMain.handle('preferences:setLanguage', (_event, language: AppLanguage) => {
+  if (language !== 'en' && language !== 'zh-Hant') {
+    throw new Error('Invalid language');
+  }
+  return setAppLanguage(language);
+});
+
+ipcMain.handle('preferences:setExperimentalFeaturesEnabled', (_event, enabled: boolean) => {
+  return setExperimentalFeaturesEnabled(Boolean(enabled));
 });
 
 // --- Vault Operations ---

@@ -1,4 +1,4 @@
-# SeedWorld — Run Instructions (MVP Foundations v2.4)
+# SeedWorld — Run Instructions (Desktop 0.2.1-alpha.1)
 
 ## Prerequisites
 
@@ -8,109 +8,65 @@
 ## Install
 
 ```bash
-npm install
+npm ci
 ```
 
 ## Development Commands
 
 ```bash
-npm run dev:server
 npm run dev:desktop
 npm run dev:web
 npm run dev:mobile
+npm run dev:server
 ```
 
 ## Desktop Packaging
 
+Generate platform icons first, then package:
+
 ```bash
-npm run make
+npm run icons:generate --workspace @seedworld/desktop
+npm run make --workspace @seedworld/desktop
 ```
 
-## Architecture Snapshot
+## Local Folder Vault (Default Storage Mode)
 
-- `apps/desktop`: Electron desktop app (main owns filesystem/secrets/sync).
-- `apps/web`: Vite + React shell.
-- `apps/mobile`: Expo shell.
-- `packages/core`: Shared event model, migrations, projection and sync engine.
-- `services/sync-server`: Self-hosted sync server.
+SeedWorld desktop defaults to a local vault folder (plain files).  
+For multi-device sync, place the vault inside OneDrive, Dropbox, iCloud Drive, Syncthing, or another cloud-folder client.
 
-## Sync Server Notes
+## Experimental Self-hosted Sync
 
-Default server URL: `http://localhost:8787`
+The custom sync-server flow is still in the codebase but hidden by default in `Settings -> Experimental`.
 
-For LAN/phone testing, start with:
+Run locally when needed:
 
 ```bash
 HOST=0.0.0.0 PORT=8787 npm run dev:server
 ```
 
-The server stores:
+## Tag Release Workflow
 
-- SQLite metadata (`data/sync.db`, WAL mode)
-- Blob bytes in filesystem (`data/blobs/<hash>`)
+Push a tag such as:
 
-## Local Multi-Device Sync Test
+```bash
+git tag v0.2.1-alpha.1
+git push origin v0.2.1-alpha.1
+```
 
-1. Start server for LAN testing:
-   - `HOST=0.0.0.0 PORT=8787 npm run dev:server`
-2. Launch desktop and web (or mobile):
-   - `npm run dev:desktop`
-   - `npm run dev:web`
-   - `npm run dev:mobile`
-3. On phone (same LAN as dev machine):
-   - open `http://<your-computer-LAN-IP>:5260`
-   - in Web Settings, set `serverUrl` to `http://<your-computer-LAN-IP>:8787`
-4. In each client sign in with:
-   - same `workspaceId`
-   - different `deviceId` (desktop auto-generated; web/mobile independent)
-5. Capture while signed out to confirm local-only mode (capture must still succeed).
-6. Create additional captures offline on each client.
-7. Reconnect network and press **Sync now**.
-8. Verify all clients converge to the same Inbox count with no duplicates.
+GitHub Actions (`.github/workflows/release-desktop.yml`) builds and publishes:
 
-## Import/Restore
+- macOS `.dmg`
+- Windows portable `.zip`
+- `SHA256SUMS.txt`
 
-Desktop import supports:
+## Phone-friendly Acceptance Checklist
 
-- `Restore`: keep source `workspaceId`
-- `Clone`: generate new `workspaceId` and rewrite imported event workspace references
-
-Web/mobile MVP import supports portable state + atoms (blobs may be pulled later by hash).
-
-## Export Contents
-
-`export.zip` includes:
-
-- `atoms/`
-- `events/events.jsonl`
-- `blobs/` (available local blob bytes)
-- `portable/state.json`
-- `manifest.json` with:
-  - `eventSchemaVersion`
-  - `minSupportedEventSchemaVersion`
-  - `referencedBlobs`
-
-## Diagnostics
-
-Diagnostics include:
-
-- last sync success
-- pending events/blobs
-- last error with code
-- last N sync attempts timeline
-- replication cursors (`lastPulledSeq`, `lastAppliedSeq`)
-
-Desktop provides:
-
-- **Copy diagnostics summary**
-- **Export diagnostics ZIP**
-
-## Acceptance Checklist (Phone-friendly)
-
-- [ ] Capture in Web/Mobile shows immediately as saved locally.
-- [ ] Capture works while signed out (local mode), with no auth prompt blocking capture.
-- [ ] Turn on airplane mode (or disable network), capture still succeeds.
-- [ ] Re-enable network and press **Sync now**; capture appears on Desktop.
-- [ ] Run concurrent edits on one atom from two clients; conflict is preserved as needs-resolution.
-- [ ] Export ZIP succeeds and includes required folders/files.
-- [ ] Import restore/clone works with clear mode selection and resulting workspace behavior.
+- [ ] First launch shows onboarding CTA to select/create a vault folder.
+- [ ] App lands on **Quick Capture** with focused input.
+- [ ] `Cmd/Ctrl + Enter` saves instantly; input clears and refocuses.
+- [ ] **Past Notes** shows the newly saved note.
+- [ ] Theme (`System/Dark/Light`) persists after restart.
+- [ ] Language (`en` / `zh-Hant`) persists after restart.
+- [ ] Moving the vault folder into OneDrive/Dropbox/iCloud syncs externally.
+- [ ] Running **Rebuild Index** fixes stale listing after external folder changes.
+- [ ] Release artifacts (DMG + Windows ZIP + checksums) are downloadable from GitHub Release.

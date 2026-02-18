@@ -22,6 +22,7 @@ interface StoreData {
     aiConfig: ProviderConfig | null;
     syncConfig?: SyncConfig | null;
     localWorkspace?: LocalWorkspace;
+    appPreferences?: AppPreferences;
     whisperManifestUrl?: string;
 }
 
@@ -39,6 +40,15 @@ export interface LocalWorkspace {
     localWorkspaceId: string;
     localDeviceId: string;
     localUserId: string;
+}
+
+export type ThemeMode = 'system' | 'dark' | 'light';
+export type AppLanguage = 'en' | 'zh-Hant';
+
+export interface AppPreferences {
+    themeMode: ThemeMode;
+    language: AppLanguage;
+    experimentalFeaturesEnabled: boolean;
 }
 
 const STORE_FILENAME = 'world-seed-settings.json';
@@ -70,6 +80,19 @@ function ensureLocalWorkspace(data: StoreData): LocalWorkspace {
     return localWorkspace;
 }
 
+function ensureAppPreferences(data: StoreData): AppPreferences {
+    const existing = data.appPreferences;
+    const next: AppPreferences = {
+        themeMode: existing?.themeMode === 'dark' || existing?.themeMode === 'light' || existing?.themeMode === 'system'
+            ? existing.themeMode
+            : 'system',
+        language: existing?.language === 'zh-Hant' ? 'zh-Hant' : 'en',
+        experimentalFeaturesEnabled: existing?.experimentalFeaturesEnabled === true,
+    };
+    data.appPreferences = next;
+    return next;
+}
+
 function loadStore(): StoreData {
     const storePath = getStorePath();
 
@@ -78,6 +101,7 @@ function loadStore(): StoreData {
             const data = fs.readFileSync(storePath, 'utf-8');
             const parsed = JSON.parse(data) as StoreData;
             ensureLocalWorkspace(parsed);
+            ensureAppPreferences(parsed);
             return parsed;
         }
     } catch (error) {
@@ -91,6 +115,11 @@ function loadStore(): StoreData {
             localWorkspaceId: generateLocalId('workspace'),
             localDeviceId: generateLocalId('desktop'),
             localUserId: 'local-user',
+        },
+        appPreferences: {
+            themeMode: 'system',
+            language: 'en',
+            experimentalFeaturesEnabled: false,
         },
     };
 }
@@ -234,4 +263,42 @@ export function setLocalWorkspace(localWorkspace: Partial<LocalWorkspace>): Loca
     };
     saveStore(data);
     return data.localWorkspace;
+}
+
+// ============================================================================
+// App Preferences (Theme / Language / Experimental)
+// ============================================================================
+
+export function getAppPreferences(): AppPreferences {
+    const data = loadStore();
+    const preferences = ensureAppPreferences(data);
+    saveStore(data);
+    return preferences;
+}
+
+export function setThemeMode(themeMode: ThemeMode): AppPreferences {
+    const data = loadStore();
+    const preferences = ensureAppPreferences(data);
+    preferences.themeMode = themeMode;
+    data.appPreferences = preferences;
+    saveStore(data);
+    return preferences;
+}
+
+export function setAppLanguage(language: AppLanguage): AppPreferences {
+    const data = loadStore();
+    const preferences = ensureAppPreferences(data);
+    preferences.language = language;
+    data.appPreferences = preferences;
+    saveStore(data);
+    return preferences;
+}
+
+export function setExperimentalFeaturesEnabled(enabled: boolean): AppPreferences {
+    const data = loadStore();
+    const preferences = ensureAppPreferences(data);
+    preferences.experimentalFeaturesEnabled = enabled;
+    data.appPreferences = preferences;
+    saveStore(data);
+    return preferences;
 }

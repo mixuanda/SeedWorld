@@ -192,6 +192,15 @@ export interface SyncStatus {
     lastAppliedSeq: number;
 }
 
+export type ThemeMode = 'system' | 'dark' | 'light';
+export type AppLanguage = 'en' | 'zh-Hant';
+
+export interface AppPreferences {
+    themeMode: ThemeMode;
+    language: AppLanguage;
+    experimentalFeaturesEnabled: boolean;
+}
+
 export interface AuthAPI {
     getConfig: () => Promise<AuthConfig | null>;
     getLocalWorkspace: () => Promise<LocalWorkspaceIdentity>;
@@ -226,8 +235,16 @@ export interface ImportAPI {
     fromZip: (input: { mode: 'restore' | 'clone' }) => Promise<{ workspaceId: string; importedEvents: number } | null>;
 }
 
+export interface PreferencesAPI {
+    get: () => Promise<AppPreferences>;
+    setThemeMode: (themeMode: ThemeMode) => Promise<AppPreferences>;
+    setLanguage: (language: AppLanguage) => Promise<AppPreferences>;
+    setExperimentalFeaturesEnabled: (enabled: boolean) => Promise<AppPreferences>;
+}
+
 export interface WorldSeedAPI {
     ping: () => Promise<string>;
+    preferences: PreferencesAPI;
     vault: VaultAPI;
     auth: AuthAPI;
     inbox: InboxAPI;
@@ -251,6 +268,20 @@ contextBridge.exposeInMainWorld('api', {
      * Test IPC connectivity - returns "pong" from main process
      */
     ping: (): Promise<string> => ipcRenderer.invoke('ping'),
+
+    preferences: {
+        get: (): Promise<AppPreferences> =>
+            ipcRenderer.invoke('preferences:get'),
+
+        setThemeMode: (themeMode: ThemeMode): Promise<AppPreferences> =>
+            ipcRenderer.invoke('preferences:setThemeMode', themeMode),
+
+        setLanguage: (language: AppLanguage): Promise<AppPreferences> =>
+            ipcRenderer.invoke('preferences:setLanguage', language),
+
+        setExperimentalFeaturesEnabled: (enabled: boolean): Promise<AppPreferences> =>
+            ipcRenderer.invoke('preferences:setExperimentalFeaturesEnabled', enabled),
+    },
 
     /**
      * Vault operations for note persistence

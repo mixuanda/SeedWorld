@@ -1,0 +1,192 @@
+{
+  "sidebar": {
+    "quickCapture": "Quick Capture",
+    "pastNotes": "Past Notes",
+    "organize": "Organize",
+    "voiceAi": "Voice & AI",
+    "settings": "Settings"
+  },
+  "app": {
+    "title": "SeedWorld",
+    "ipcOk": "IPC OK",
+    "vaultReady": "Vault Ready",
+    "loading": "Loading SeedWorld..."
+  },
+  "common": {
+    "refresh": "Refresh",
+    "rebuildIndex": "Rebuild Index",
+    "never": "Never"
+  },
+  "quickCapture": {
+    "title": "Quick Capture",
+    "subtitle": "Capture fast, keep flow. Nothing blocks local save.",
+    "optionalTitle": "Optional title",
+    "placeholder": "Write your capture...",
+    "save": "Save",
+    "saving": "Saving...",
+    "shortcut": "Cmd/Ctrl + Enter to save",
+    "focusShortcut": "Cmd/Ctrl + L focuses capture",
+    "voiceTitle": "Hold ideas by voice",
+    "recent": "Recent",
+    "noRecent": "No notes yet.",
+    "savedToast": "Saved. Ready for the next capture.",
+    "voiceSavedToast": "Voice note saved."
+  },
+  "history": {
+    "title": "Past Notes",
+    "searchPlaceholder": "Search title or content",
+    "loadedToast": "Loaded {{count}} notes.",
+    "indexRebuiltToast": "Index rebuilt ({{count}} notes).",
+    "indexRebuiltFallbackToast": "Index rebuilt.",
+    "noteDeletedToast": "Note deleted."
+  },
+  "organize": {
+    "title": "Organize (Coming Soon)",
+    "searchPlaceholder": "Search across notes",
+    "matchingNotes": "Matching notes",
+    "noMatches": "No matching notes.",
+    "suggestedActions": "Suggested next actions",
+    "action1": "Tag captures by project and timeframe.",
+    "action2": "Link related notes before weekly review.",
+    "action3": "Promote recurring ideas into standing docs.",
+    "action4": "Create a Friday inbox-to-structure routine."
+  },
+  "voiceAi": {
+    "title": "Voice & AI"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "storage": "Storage",
+      "data": "Data",
+      "appearance": "Appearance",
+      "voiceAi": "Voice & AI",
+      "experimental": "Experimental"
+    },
+    "storage": {
+      "title": "Storage & Sync",
+      "description": "SeedWorld stores everything in a local vault folder. Cloud sync is managed by your folder provider.",
+      "localGuidance": "Put this vault inside your OneDrive, iCloud Drive, Dropbox, or Syncthing folder to sync across devices.",
+      "modes": {
+        "local": {
+          "title": "Local Folder",
+          "meta": "Available · Recommended"
+        },
+        "cloud": {
+          "title": "Cloud Provider Sync",
+          "meta": "Coming soon"
+        },
+        "selfHosted": {
+          "title": "Self-hosted Sync Server",
+          "meta": "Experimental"
+        }
+      },
+      "copyPath": "Copy path",
+      "vaultMissing": "No vault configured",
+      "reselectFolder": "Reselect folder",
+      "copyPathToast": "Vault path copied.",
+      "syncHealth": {
+        "title": "Sync Health Check",
+        "run": "Run health check",
+        "running": "Checking...",
+        "statusOk": "OK",
+        "statusWarning": "Warning",
+        "heuristicDetected": "Cloud-folder heuristic: Detected",
+        "heuristicNotDetected": "Cloud-folder heuristic: Not detected",
+        "conflictFiles": "Conflict-copy files found: {{count}}",
+        "recommendations": "Recommendations"
+      },
+      "healthOkToast": "Sync health check: OK.",
+      "healthWarningToast": "Sync health check: warnings found.",
+      "cloudModeHint": "Built-in provider integrations are coming later. For now use Local Folder mode and your provider client.",
+      "selfHostedHint": "Self-hosted sync is optional and experimental. Enable experimental features to configure it."
+    },
+    "data": {
+      "title": "Data",
+      "description": "Import, export, and diagnostics tools.",
+      "exportZip": "Export ZIP",
+      "importMode": "Import mode",
+      "restoreMode": "Restore (keep workspaceId)",
+      "cloneMode": "Clone (new workspaceId)",
+      "importRestoreZip": "Import/Restore ZIP",
+      "importing": "Importing...",
+      "copyDiagnostics": "Copy diagnostics summary",
+      "exportDiagnostics": "Export diagnostics ZIP",
+      "exportToast": "Export saved: {{path}}",
+      "importToast": "Import complete ({{count}} events).",
+      "copyDiagnosticsToast": "Diagnostics summary copied.",
+      "exportDiagnosticsToast": "Diagnostics exported: {{path}}"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Control theme and language.",
+      "themeLabel": "Theme",
+      "themeSystem": "System",
+      "themeDark": "Dark",
+      "themeLight": "Light",
+      "languageLabel": "Language",
+      "languageEnglish": "English",
+      "languageTraditionalChinese": "繁體中文 (Traditional Chinese)",
+      "experimentalToggle": "Enable Experimental Features"
+    },
+    "voiceAi": {
+      "title": "Voice & AI",
+      "description": "Configure Whisper and AI provider settings in the Voice & AI section.",
+      "open": "Open Voice & AI"
+    },
+    "experimental": {
+      "summary": "Experimental: Custom sync-server controls (not required for normal use)",
+      "serverUrl": "Server URL",
+      "userId": "User ID",
+      "workspaceId": "Workspace ID",
+      "devSignIn": "Dev Sign In",
+      "signingIn": "Signing in...",
+      "signOut": "Sign out",
+      "syncNow": "Sync now",
+      "syncing": "Syncing...",
+      "signInToast": "Experimental sync sign-in successful.",
+      "signOutToast": "Experimental sync signed out.",
+      "syncToast": "Experimental sync completed.",
+      "statusPrefix": "Status"
+    }
+  },
+  "sync": {
+    "lastSuccess": "Last success: {{value}}",
+    "pendingEvents": "Pending events: {{count}}",
+    "pendingBlobs": "Pending blobs: {{count}}",
+    "cursor": "Cursor: pull={{pulled}} applied={{applied}}",
+    "lastError": "Last error: {{message}} ({{code}})",
+    "lastErrorNone": "Last error: none",
+    "noStatus": "No sync status available yet."
+  },
+  "vaultSetup": {
+    "title": "Welcome to SeedWorld",
+    "description": "Choose where your local vault lives. Put it inside OneDrive, iCloud Drive, Dropbox, or Syncthing to sync across devices.",
+    "featurePlainFiles": "Notes saved as plain Markdown files",
+    "featureCloudSync": "Sync managed by your cloud-folder provider",
+    "featureDataControl": "Your data stays under your control",
+    "selectFolder": "Select Vault Folder",
+    "createVault": "Create New Vault",
+    "selecting": "Selecting...",
+    "selectError": "Failed to select folder",
+    "tip": "Tip: Create a folder like OneDrive/SeedWorld or iCloud Drive/SeedWorld"
+  },
+  "errors": {
+    "initializationFailed": "Initialization failed",
+    "saveFailed": "Failed to save note",
+    "refreshFailed": "Failed to refresh notes",
+    "rebuildFailed": "Failed to rebuild index",
+    "deleteFailed": "Failed to delete note",
+    "changeVaultFailed": "Failed to change vault folder",
+    "exportFailed": "Export failed",
+    "importFailed": "Import failed",
+    "copyDiagnosticsFailed": "Failed to copy diagnostics summary",
+    "exportDiagnosticsFailed": "Failed to export diagnostics",
+    "syncHealthFailed": "Sync health check failed",
+    "devSignInFailed": "Dev sign-in failed",
+    "devSignOutFailed": "Sign out failed",
+    "experimentalSyncFailed": "Sync failed",
+    "invalidDevServer": "Server URL is required for dev auth.",
+    "clipboardFailed": "Failed to copy to clipboard"
+  }
+}

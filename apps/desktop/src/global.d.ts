@@ -25,6 +25,9 @@ export type {
   InboxItem,
   SyncError,
   SyncStatus,
+  ThemeMode,
+  AppLanguage,
+  AppPreferences,
   AuthAPI,
   InboxAPI,
   CaptureAPI,
@@ -32,6 +35,7 @@ export type {
   ExportAPI,
   DiagnosticsAPI,
   ImportAPI,
+  PreferencesAPI,
   WorldSeedAPI,
 } from './preload';
 
